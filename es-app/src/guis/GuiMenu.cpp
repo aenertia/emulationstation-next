@@ -5277,6 +5277,188 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 			if (nullifySwitch->getState() != initialNullify)
 				RxnmNetwork::setGlobalNullify(nullifySwitch->getState());
 		});
+
+		// KNOWN NETWORKS
+		s->addGroup(_("WIFI MANAGEMENT"));
+
+		s->addEntry(_("KNOWN NETWORKS"), true, [window] {
+			window->pushGui(new GuiLoading<std::vector<RxnmNetwork::KnownNetwork>>(window,
+				_("LOADING KNOWN NETWORKS..."),
+				[](auto gui) { return RxnmNetwork::getKnownNetworks(); },
+				[window](std::vector<RxnmNetwork::KnownNetwork> networks) {
+					auto s2 = new GuiSettings(window, _("KNOWN NETWORKS"));
+					if (networks.empty()) {
+						s2->addEntry(_("NO SAVED NETWORKS"), false, nullptr);
+					} else {
+						for (auto& net : networks) {
+							std::string label = net.ssid;
+							if (!net.security.empty())
+								label += "  (" + net.security + ")";
+							std::string ssid = net.ssid;
+							s2->addEntry(label, true, [window, ssid, s2] {
+								window->pushGui(new GuiMsgBox(window,
+									_("FORGET NETWORK") + " \"" + ssid + "\"?",
+									_("YES"), [window, ssid, s2] {
+										window->pushGui(new GuiLoading<bool>(window,
+											_("FORGETTING NETWORK..."),
+											[ssid](auto gui) { return RxnmNetwork::forgetNetwork(ssid); },
+											[window, s2](bool success) {
+												delete s2;
+											}));
+									},
+									_("NO"), nullptr));
+							});
+						}
+					}
+					window->pushGui(s2);
+				}));
+		});
+
+		// WIFI AP / HOTSPOT
+		s->addEntry(_("WIFI HOTSPOT"), true, [window] {
+			auto s2 = new GuiSettings(window, _("WIFI HOTSPOT"));
+
+			s2->addInputTextConfigRow(_("HOTSPOT SSID"), "wifi.ap.ssid", false);
+			s2->addInputTextConfigRow(_("HOTSPOT PASSWORD"), "wifi.ap.key", true);
+
+			auto shareSwitch = std::make_shared<SwitchComponent>(window);
+			shareSwitch->setState(SystemConf::getInstance()->getBool("wifi.ap.share"));
+			s2->addWithLabel(_("SHARE INTERNET"), shareSwitch);
+
+			s2->addEntry(_("START HOTSPOT"), false, [window, shareSwitch] {
+				std::string apSsid = SystemConf::getInstance()->get("wifi.ap.ssid");
+				std::string apKey = SystemConf::getInstance()->get("wifi.ap.key");
+				bool share = shareSwitch->getState();
+				SystemConf::getInstance()->setBool("wifi.ap.share", share);
+
+				if (apSsid.empty()) {
+					window->pushGui(new GuiMsgBox(window, _("PLEASE SET A HOTSPOT SSID")));
+					return;
+				}
+
+				window->pushGui(new GuiLoading<bool>(window, _("STARTING HOTSPOT..."),
+					[apSsid, apKey, share](auto gui) {
+						return RxnmNetwork::startAP(apSsid, apKey, share);
+					},
+					[window](bool success) {
+						window->pushGui(new GuiMsgBox(window,
+							success ? _("HOTSPOT STARTED") : _("HOTSPOT FAILED")));
+					}));
+			});
+
+			s2->addEntry(_("STOP HOTSPOT"), false, [window] {
+				window->pushGui(new GuiLoading<bool>(window, _("STOPPING HOTSPOT..."),
+					[](auto gui) { return RxnmNetwork::stopAP(); },
+					[window](bool success) {
+						window->pushGui(new GuiMsgBox(window, _("HOTSPOT STOPPED")));
+					}));
+			});
+
+			window->pushGui(s2);
+		});
+
+		// INTERNET CHECK
+		s->addEntry(_("CHECK INTERNET"), false, [window] {
+			window->pushGui(new GuiLoading<bool>(window, _("CHECKING CONNECTIVITY..."),
+				[](auto gui) { return RxnmNetwork::checkInternet(); },
+				[window](bool connected) {
+					window->pushGui(new GuiMsgBox(window,
+						connected ? _("INTERNET: CONNECTED") : _("INTERNET: NOT CONNECTED")));
+				}));
+		});
+
+		// PROFILES
+		s->addGroup(_("NETWORK PROFILES"));
+
+		s->addEntry(_("SAVE PROFILE"), false, [window] {
+			auto updateVal = [window](const std::string& name) {
+				if (name.empty()) return;
+				window->pushGui(new GuiLoading<bool>(window, _("SAVING PROFILE..."),
+					[name](auto gui) { return RxnmNetwork::saveProfile(name); },
+					[window, name](bool success) {
+						window->pushGui(new GuiMsgBox(window,
+							success ? _("PROFILE SAVED") : _("PROFILE SAVE FAILED")));
+					}));
+			};
+			if (Settings::getInstance()->getBool("UseOSK"))
+				window->pushGui(new GuiTextEditPopupKeyboard(window, _("PROFILE NAME"), "", updateVal, false));
+			else
+				window->pushGui(new GuiTextEditPopup(window, _("PROFILE NAME"), "", updateVal, false));
+		});
+
+		s->addEntry(_("LOAD PROFILE"), true, [window] {
+			window->pushGui(new GuiLoading<std::vector<std::string>>(window,
+				_("LOADING PROFILES..."),
+				[](auto gui) { return RxnmNetwork::listProfiles(); },
+				[window](std::vector<std::string> profiles) {
+					auto s2 = new GuiSettings(window, _("LOAD PROFILE"));
+					if (profiles.empty()) {
+						s2->addEntry(_("NO SAVED PROFILES"), false, nullptr);
+					} else {
+						for (auto& name : profiles) {
+							s2->addEntry(name, false, [window, name, s2] {
+								window->pushGui(new GuiLoading<bool>(window, _("LOADING PROFILE..."),
+									[name](auto gui) { return RxnmNetwork::loadProfile(name); },
+									[window, s2](bool success) {
+										window->pushGui(new GuiMsgBox(window,
+											success ? _("PROFILE LOADED") : _("PROFILE LOAD FAILED")));
+										delete s2;
+									}));
+							});
+						}
+					}
+					window->pushGui(s2);
+				}));
+		});
+
+		// VPN (WireGuard)
+		s->addGroup(_("VPN"));
+
+		s->addEntry(_("WIREGUARD"), true, [window] {
+			auto s2 = new GuiSettings(window, _("WIREGUARD VPN"));
+
+			s2->addInputTextConfigRow(_("TUNNEL NAME"), "vpn.wg.name", false);
+			s2->addInputTextConfigRow(_("PRIVATE KEY"), "vpn.wg.private_key", true);
+			s2->addInputTextConfigRow(_("PEER PUBLIC KEY"), "vpn.wg.peer_key", false);
+			s2->addInputTextConfigRow(_("ENDPOINT"), "vpn.wg.endpoint", false);
+			s2->addInputTextConfigRow(_("ALLOWED IPS"), "vpn.wg.allowed_ips", false);
+			s2->addInputTextConfigRow(_("ADDRESS"), "vpn.wg.address", false);
+
+			s2->addEntry(_("CONNECT"), false, [window] {
+				RxnmNetwork::VpnConfig cfg;
+				cfg.name = SystemConf::getInstance()->get("vpn.wg.name");
+				cfg.privateKey = SystemConf::getInstance()->get("vpn.wg.private_key");
+				cfg.peerKey = SystemConf::getInstance()->get("vpn.wg.peer_key");
+				cfg.endpoint = SystemConf::getInstance()->get("vpn.wg.endpoint");
+				cfg.allowedIps = SystemConf::getInstance()->get("vpn.wg.allowed_ips");
+				cfg.address = SystemConf::getInstance()->get("vpn.wg.address");
+
+				if (cfg.name.empty()) {
+					window->pushGui(new GuiMsgBox(window, _("PLEASE SET A TUNNEL NAME")));
+					return;
+				}
+
+				window->pushGui(new GuiLoading<bool>(window, _("CONNECTING VPN..."),
+					[cfg](auto gui) { return RxnmNetwork::vpnConnect(cfg); },
+					[window](bool success) {
+						window->pushGui(new GuiMsgBox(window,
+							success ? _("VPN CONNECTED") : _("VPN CONNECTION FAILED")));
+					}));
+			});
+
+			s2->addEntry(_("DISCONNECT"), false, [window] {
+				std::string name = SystemConf::getInstance()->get("vpn.wg.name");
+				if (name.empty()) return;
+				window->pushGui(new GuiLoading<bool>(window, _("DISCONNECTING VPN..."),
+					[name](auto gui) { return RxnmNetwork::vpnDisconnect(name); },
+					[window](bool success) {
+						window->pushGui(new GuiMsgBox(window, _("VPN DISCONNECTED")));
+					}));
+			});
+
+			window->pushGui(s2);
+		});
+
 	} else {
 #endif
 	auto ip = std::make_shared<TextComponent>(mWindow, ApiSystem::getInstance()->getIpAddress(), font, color);
@@ -5419,23 +5601,37 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 
 			if (baseSSID != newSSID || baseKEY != newKey || baseCountry != newCountry || !baseWifiEnabled)
 			{
-				if (ApiSystem::getInstance()->enableWifi(newSSID, newKey, newCountry))
-					window->pushGui(new GuiMsgBox(window, _("WIFI ENABLED")));
-				else
-					window->pushGui(new GuiMsgBox(window, _("WIFI CONFIGURATION ERROR")));
+				window->pushGui(new GuiLoading<bool>(window, _("CONNECTING TO WIFI..."),
+					[newSSID, newKey, newCountry](auto gui) {
+						return ApiSystem::getInstance()->enableWifi(newSSID, newKey, newCountry);
+					},
+					[window](bool success) {
+						window->pushGui(new GuiMsgBox(window,
+							success ? _("WIFI ENABLED") : _("WIFI CONFIGURATION ERROR")));
+					}));
 			}
 #else
 			if (baseSSID != newSSID || baseKEY != newKey || !baseWifiEnabled)
 			{
-				if (ApiSystem::getInstance()->enableWifi(newSSID, newKey))
-					window->pushGui(new GuiMsgBox(window, _("WIFI ENABLED")));
-				else
-					window->pushGui(new GuiMsgBox(window, _("WIFI CONFIGURATION ERROR")));
+				window->pushGui(new GuiLoading<bool>(window, _("CONNECTING TO WIFI..."),
+					[newSSID, newKey](auto gui) {
+						return ApiSystem::getInstance()->enableWifi(newSSID, newKey);
+					},
+					[window](bool success) {
+						window->pushGui(new GuiMsgBox(window,
+							success ? _("WIFI ENABLED") : _("WIFI CONFIGURATION ERROR")));
+					}));
 			}
 #endif
 		}
 		else if (baseWifiEnabled)
-			ApiSystem::getInstance()->disableWifi();
+		{
+			window->pushGui(new GuiLoading<bool>(window, _("DISABLING WIFI..."),
+				[](auto gui) {
+					ApiSystem::getInstance()->disableWifi();
+					return true;
+				}, nullptr));
+		}
 	});
 
 	enable_wifi->setOnChangedCallback([this, s, baseWifiEnabled, enable_wifi, baseAdhocEnabled, enable_adhoc]()
@@ -5446,20 +5642,38 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 		{
 			SystemConf::getInstance()->setBool("wifi.enabled", wifienabled);
 
-			if (wifienabled)
-			{
+			std::string ssid = SystemConf::getInstance()->get("wifi.ssid");
+			std::string key = SystemConf::getInstance()->get("wifi.key");
 #if !WIN32
-				std::string country = SystemConf::getInstance()->get("wifi.country");
-				ApiSystem::getInstance()->enableWifi(SystemConf::getInstance()->get("wifi.ssid"), SystemConf::getInstance()->get("wifi.key"), country);
-#else
-				ApiSystem::getInstance()->enableWifi(SystemConf::getInstance()->get("wifi.ssid"), SystemConf::getInstance()->get("wifi.key"));
+			std::string country = SystemConf::getInstance()->get("wifi.country");
 #endif
-			}
-			else
-				ApiSystem::getInstance()->disableWifi();
+
+			auto* self = this;
+			auto wnd = mWindow;
 
 			delete s;
-			openNetworkSettings(true);
+
+			wnd->pushGui(new GuiLoading<bool>(wnd,
+				wifienabled ? _("CONNECTING TO WIFI...") : _("DISABLING WIFI..."),
+				[wifienabled, ssid, key
+#if !WIN32
+				, country
+#endif
+				](auto gui) {
+					if (wifienabled) {
+#if !WIN32
+						return ApiSystem::getInstance()->enableWifi(ssid, key, country);
+#else
+						return ApiSystem::getInstance()->enableWifi(ssid, key);
+#endif
+					} else {
+						ApiSystem::getInstance()->disableWifi();
+						return true;
+					}
+				},
+				[self](bool success) {
+					self->openNetworkSettings(true);
+				}));
 		}
 	});
 
@@ -5478,18 +5692,40 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 		SystemConf::getInstance()->setBool("wifi.adhoc.enabled", adhocenabled);
 		SystemConf::getInstance()->saveSystemConf();
 
-		if (wifienabled)
-		{
-			ApiSystem::getInstance()->disableWifi();
+		std::string ssid = SystemConf::getInstance()->get("wifi.ssid");
+		std::string key = SystemConf::getInstance()->get("wifi.key");
 #if !WIN32
-			ApiSystem::getInstance()->enableWifi(SystemConf::getInstance()->get("wifi.ssid"), SystemConf::getInstance()->get("wifi.key"), SystemConf::getInstance()->get("wifi.country"));
-#else
-			ApiSystem::getInstance()->enableWifi(SystemConf::getInstance()->get("wifi.ssid"), SystemConf::getInstance()->get("wifi.key"));
+		std::string country = SystemConf::getInstance()->get("wifi.country");
 #endif
-		}
+
+		auto* self = this;
+		auto wnd = mWindow;
 
 		delete s;
-		openNetworkSettings(false, true);
+
+		if (wifienabled)
+		{
+			wnd->pushGui(new GuiLoading<bool>(wnd, _("RECONNECTING WIFI..."),
+				[ssid, key
+#if !WIN32
+				, country
+#endif
+				](auto gui) {
+					ApiSystem::getInstance()->disableWifi();
+#if !WIN32
+					return ApiSystem::getInstance()->enableWifi(ssid, key, country);
+#else
+					return ApiSystem::getInstance()->enableWifi(ssid, key);
+#endif
+				},
+				[self](bool success) {
+					self->openNetworkSettings(false, true);
+				}));
+		}
+		else
+		{
+			openNetworkSettings(false, true);
+		}
 	});
 
 	// NETWORK SERVICES

@@ -13,6 +13,17 @@ static std::string stripCidr(const std::string& addr) {
     return (pos != std::string::npos) ? addr.substr(0, pos) : addr;
 }
 
+// Shell-escape a string for safe inclusion in double-quoted args
+static std::string shellEscape(const std::string& s) {
+    std::string out;
+    for (char c : s) {
+        if (c == '"' || c == '\\' || c == '$' || c == '`')
+            out += '\\';
+        out += c;
+    }
+    return out;
+}
+
 std::string RxnmNetwork::execRxnm(const std::string& args)
 {
     std::string cmd = "rxnm " + args + " 2>/dev/null";
@@ -29,6 +40,24 @@ std::string RxnmNetwork::execRxnm(const std::string& args)
 
     pclose(pipe);
     return result;
+}
+
+bool RxnmNetwork::parseSuccess(const std::string& json)
+{
+    if (json.empty())
+        return false;
+
+    rapidjson::Document doc;
+    doc.Parse(json.c_str());
+    if (doc.HasParseError() || !doc.IsObject())
+        return false;
+
+    if (doc.HasMember("success") && doc["success"].IsBool())
+        return doc["success"].GetBool();
+    if (doc.HasMember("connected") && doc["connected"].IsBool())
+        return doc["connected"].GetBool();
+
+    return false;
 }
 
 bool RxnmNetwork::isAvailable()
@@ -75,11 +104,18 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
                 || iface.type == "tunnel" || iface.name == "sit0" || iface.name == "lo")
                 continue;
 
+            // Also skip "unknown" type interfaces (e.g. sit0 variants)
+            if (iface.type == "unknown")
+                continue;
+
             if (obj.HasMember("state") && obj["state"].IsString())
                 iface.state = obj["state"].GetString();
 
             if (obj.HasMember("mac") && obj["mac"].IsString())
                 iface.mac = obj["mac"].GetString();
+
+            if (obj.HasMember("driver") && obj["driver"].IsString())
+                iface.driver = obj["driver"].GetString();
 
             if (obj.HasMember("mtu") && obj["mtu"].IsInt())
                 iface.mtu = obj["mtu"].GetInt();
@@ -91,6 +127,19 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
 
             if (obj.HasMember("nullified") && obj["nullified"].IsBool())
                 iface.isNullified = obj["nullified"].GetBool();
+
+            // WiFi sub-object
+            if (obj.HasMember("wifi") && obj["wifi"].IsObject()) {
+                const auto& wifi = obj["wifi"];
+                if (wifi.HasMember("ssid") && wifi["ssid"].IsString())
+                    iface.wifiSsid = wifi["ssid"].GetString();
+                if (wifi.HasMember("bssid") && wifi["bssid"].IsString())
+                    iface.wifiBssid = wifi["bssid"].GetString();
+                if (wifi.HasMember("rssi") && wifi["rssi"].IsInt())
+                    iface.wifiRssi = wifi["rssi"].GetInt();
+                if (wifi.HasMember("frequency") && wifi["frequency"].IsInt())
+                    iface.wifiFrequency = wifi["frequency"].GetInt();
+            }
 
             // IPv4 array — rxnm returns ["addr/prefix", ...], use first non-link-local
             if (obj.HasMember("ipv4") && obj["ipv4"].IsArray()) {
@@ -267,6 +316,42 @@ std::vector<RxnmNetwork::WifiNetwork> RxnmNetwork::listNetworks(const std::strin
     return networks;
 }
 
+std::vector<RxnmNetwork::KnownNetwork> RxnmNetwork::getKnownNetworks()
+{
+    std::vector<KnownNetwork> networks;
+    std::string json = execRxnm("wifi list --json");
+    if (json.empty())
+        return networks;
+
+    rapidjson::Document doc;
+    doc.Parse(json.c_str());
+    if (doc.HasParseError() || !doc.IsObject())
+        return networks;
+
+    if (!doc.HasMember("networks") || !doc["networks"].IsArray())
+        return networks;
+
+    for (auto& item : doc["networks"].GetArray()) {
+        if (!item.IsObject()) continue;
+        KnownNetwork net;
+        if (item.HasMember("ssid") && item["ssid"].IsString())
+            net.ssid = item["ssid"].GetString();
+        if (item.HasMember("security") && item["security"].IsString())
+            net.security = item["security"].GetString();
+        if (item.HasMember("last_connected") && item["last_connected"].IsString())
+            net.lastConnected = item["last_connected"].GetString();
+        if (!net.ssid.empty())
+            networks.push_back(net);
+    }
+
+    return networks;
+}
+
+bool RxnmNetwork::forgetNetwork(const std::string& ssid)
+{
+    return parseSuccess(execRxnm("wifi forget \"" + shellEscape(ssid) + "\" --json"));
+}
+
 bool RxnmNetwork::enableWifi(const std::string& ssid, const std::string& password,
                              const std::string& country)
 {
@@ -275,7 +360,7 @@ bool RxnmNetwork::enableWifi(const std::string& ssid, const std::string& passwor
 
     // 2. Set regulatory country code if provided
     if (!country.empty())
-        execRxnm("wifi country " + country + " --json");
+        setCountry(country);
 
     // 3. Connect to network (rxnm internally calls reconfigure_iface for DHCP)
     bool result = connectWifi(ssid, password);
@@ -296,34 +381,37 @@ bool RxnmNetwork::disableWifi()
 
 bool RxnmNetwork::connectWifi(const std::string& ssid, const std::string& password, bool hidden)
 {
-    std::string cmd = "wifi connect \"" + ssid + "\" --password \"" + password + "\"";
+    std::string cmd = "wifi connect \"" + shellEscape(ssid) + "\" --password \"" + shellEscape(password) + "\"";
     if (hidden)
         cmd += " --hidden";
     cmd += " --json";
 
-    std::string json = execRxnm(cmd);
-    if (json.empty())
-        return false;
-
-    rapidjson::Document doc;
-    doc.Parse(json.c_str());
-    if (doc.HasParseError())
-        return false;
-
-    // rxnm OutputResponse: {"success": bool, ...}
-    // ActionResponse may also have: {"connected": bool, "ssid": "...", ...}
-    if (doc.HasMember("success") && doc["success"].IsBool())
-        return doc["success"].GetBool();
-    if (doc.HasMember("connected") && doc["connected"].IsBool())
-        return doc["connected"].GetBool();
-
-    return false;
+    return parseSuccess(execRxnm(cmd));
 }
 
 bool RxnmNetwork::disconnectWifi()
 {
     std::string json = execRxnm("wifi disconnect --json");
     return !json.empty();
+}
+
+bool RxnmNetwork::setCountry(const std::string& code)
+{
+    return parseSuccess(execRxnm("wifi country " + code + " --json"));
+}
+
+bool RxnmNetwork::startAP(const std::string& ssid, const std::string& password, bool share)
+{
+    std::string cmd = "wifi ap start \"" + shellEscape(ssid) + "\" --password \"" + shellEscape(password) + "\"";
+    if (share)
+        cmd += " --share";
+    cmd += " --json";
+    return parseSuccess(execRxnm(cmd));
+}
+
+bool RxnmNetwork::stopAP()
+{
+    return parseSuccess(execRxnm("wifi disconnect --json"));
 }
 
 std::string RxnmNetwork::getIpAddress()
@@ -336,17 +424,106 @@ std::string RxnmNetwork::getIpAddress()
     return "NOT CONNECTED";
 }
 
+bool RxnmNetwork::checkInternet()
+{
+    std::string json = execRxnm("system check internet --json");
+    if (json.empty())
+        return false;
+
+    rapidjson::Document doc;
+    doc.Parse(json.c_str());
+    if (doc.HasParseError() || !doc.IsObject())
+        return false;
+
+    if (doc.HasMember("connected") && doc["connected"].IsBool())
+        return doc["connected"].GetBool();
+    if (doc.HasMember("success") && doc["success"].IsBool())
+        return doc["success"].GetBool();
+
+    return false;
+}
+
 bool RxnmNetwork::setGlobalNullify(bool enable)
 {
     std::string cmd = std::string("system nullify ") + (enable ? "enable" : "disable") + " --json";
-    std::string json = execRxnm(cmd);
-    return !json.empty();
+    return parseSuccess(execRxnm(cmd));
 }
 
 bool RxnmNetwork::setInterfaceNullify(const std::string& iface, bool enable)
 {
     std::string cmd = std::string("system nullify ") + (enable ? "enable" : "disable")
         + " --interface " + iface + " --json";
-    std::string json = execRxnm(cmd);
-    return !json.empty();
+    return parseSuccess(execRxnm(cmd));
+}
+
+bool RxnmNetwork::setInterfaceDhcp(const std::string& iface)
+{
+    return parseSuccess(execRxnm("interface " + iface + " set dhcp --json"));
+}
+
+bool RxnmNetwork::setInterfaceStatic(const std::string& iface, const std::string& ip,
+                                     const std::string& gateway, const std::string& dns)
+{
+    std::string cmd = "interface " + iface + " set static " + ip;
+    if (!gateway.empty())
+        cmd += " --gateway " + gateway;
+    if (!dns.empty())
+        cmd += " --dns " + dns;
+    cmd += " --json";
+    return parseSuccess(execRxnm(cmd));
+}
+
+std::vector<std::string> RxnmNetwork::listProfiles()
+{
+    std::vector<std::string> profiles;
+    std::string json = execRxnm("profile list --json");
+    if (json.empty())
+        return profiles;
+
+    rapidjson::Document doc;
+    doc.Parse(json.c_str());
+    if (doc.HasParseError() || !doc.IsObject())
+        return profiles;
+
+    if (!doc.HasMember("profiles") || !doc["profiles"].IsArray())
+        return profiles;
+
+    for (auto& item : doc["profiles"].GetArray()) {
+        if (item.IsString())
+            profiles.push_back(item.GetString());
+    }
+
+    return profiles;
+}
+
+bool RxnmNetwork::saveProfile(const std::string& name)
+{
+    return parseSuccess(execRxnm("profile save \"" + shellEscape(name) + "\" --json"));
+}
+
+bool RxnmNetwork::loadProfile(const std::string& name)
+{
+    return parseSuccess(execRxnm("profile load \"" + shellEscape(name) + "\" --json"));
+}
+
+bool RxnmNetwork::vpnConnect(const VpnConfig& cfg)
+{
+    std::string cmd = "vpn wireguard connect \"" + shellEscape(cfg.name) + "\"";
+    if (!cfg.privateKey.empty())
+        cmd += " --private-key \"" + shellEscape(cfg.privateKey) + "\"";
+    if (!cfg.peerKey.empty())
+        cmd += " --peer-key \"" + shellEscape(cfg.peerKey) + "\"";
+    if (!cfg.endpoint.empty())
+        cmd += " --endpoint \"" + shellEscape(cfg.endpoint) + "\"";
+    if (!cfg.allowedIps.empty())
+        cmd += " --allowed-ips \"" + shellEscape(cfg.allowedIps) + "\"";
+    if (!cfg.address.empty())
+        cmd += " --address \"" + shellEscape(cfg.address) + "\"";
+    cmd += " --json";
+    return parseSuccess(execRxnm(cmd));
+}
+
+bool RxnmNetwork::vpnDisconnect(const std::string& name)
+{
+    return parseSuccess(execRxnm("vpn wireguard disconnect \"" + shellEscape(name) + "\" --json"));
 }

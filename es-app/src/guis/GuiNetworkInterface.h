@@ -25,6 +25,11 @@ private:
 	std::shared_ptr<TextComponent> mIpv6Text;
 	std::shared_ptr<TextComponent> mMacText;
 
+	// WiFi live-updating fields
+	std::shared_ptr<TextComponent> mWifiSsidText;
+	std::shared_ptr<TextComponent> mWifiRssiText;
+	std::shared_ptr<TextComponent> mWifiFreqText;
+
 	// Async polling
 	std::future<RxnmNetwork::SystemStatus> mPendingStatus;
 	int mPollTimer = 0;
