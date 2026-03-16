@@ -5275,40 +5275,37 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 		s->addWithLabel(_("NULLIFY MODE"), nullifySwitch);
 		s->addSaveFunc([nullifySwitch, initialNullify] {
 			if (nullifySwitch->getState() != initialNullify)
-				RxnmNetwork::setGlobalNullify(nullifySwitch->getState());
+				RxnmNetwork::exec(std::string("system nullify ") + (nullifySwitch->getState() ? "enable" : "disable"));
 		});
 
 		// KNOWN NETWORKS
 		s->addGroup(_("WIFI MANAGEMENT"));
 
 		s->addEntry(_("KNOWN NETWORKS"), true, [window] {
-			window->pushGui(new GuiLoading<std::vector<RxnmNetwork::KnownNetwork>>(window,
+			window->pushGui(new GuiLoading<std::vector<RxnmNetwork::WifiNetwork>>(window,
 				_("LOADING KNOWN NETWORKS..."),
-				[](auto gui) { return RxnmNetwork::getKnownNetworks(); },
-				[window](std::vector<RxnmNetwork::KnownNetwork> networks) {
+				[](auto gui) { return RxnmNetwork::scanNetworks(); },
+				[window](std::vector<RxnmNetwork::WifiNetwork> networks) {
 					auto s2 = new GuiSettings(window, _("KNOWN NETWORKS"));
-					if (networks.empty()) {
-						s2->addEntry(_("NO SAVED NETWORKS"), false, nullptr);
-					} else {
-						for (auto& net : networks) {
-							std::string label = net.ssid;
-							if (!net.security.empty())
-								label += "  (" + net.security + ")";
-							std::string ssid = net.ssid;
-							s2->addEntry(label, true, [window, ssid, s2] {
-								window->pushGui(new GuiMsgBox(window,
-									_("FORGET NETWORK") + " \"" + ssid + "\"?",
-									_("YES"), [window, ssid, s2] {
-										window->pushGui(new GuiLoading<bool>(window,
-											_("FORGETTING NETWORK..."),
-											[ssid](auto gui) { return RxnmNetwork::forgetNetwork(ssid); },
-											[window, s2](bool success) {
-												delete s2;
-											}));
-									},
-									_("NO"), nullptr));
-							});
-						}
+					for (auto& net : networks) {
+						if (!net.known) continue;
+						std::string label = net.ssid + "  (" + net.security + ")";
+						if (net.connected) label += "  *";
+						std::string ssid = net.ssid;
+						s2->addEntry(label, true, [window, ssid, s2] {
+							window->pushGui(new GuiMsgBox(window,
+								_("FORGET NETWORK") + " \"" + ssid + "\"?",
+								_("YES"), [window, ssid, s2] {
+									window->pushGui(new GuiLoading<bool>(window,
+										_("FORGETTING NETWORK..."),
+										[ssid](auto gui) {
+											RxnmNetwork::exec("wifi forget \"" + ssid + "\"");
+											return RxnmNetwork::reload();
+										},
+										[window, s2](bool success) { delete s2; }));
+								},
+								_("NO"), nullptr));
+						});
 					}
 					window->pushGui(s2);
 				}));
@@ -5317,68 +5314,46 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 		// WIFI AP / HOTSPOT
 		s->addEntry(_("WIFI HOTSPOT"), true, [window] {
 			auto s2 = new GuiSettings(window, _("WIFI HOTSPOT"));
-
 			s2->addInputTextConfigRow(_("HOTSPOT SSID"), "wifi.ap.ssid", false);
 			s2->addInputTextConfigRow(_("HOTSPOT PASSWORD"), "wifi.ap.key", true);
 
-			auto shareSwitch = std::make_shared<SwitchComponent>(window);
-			shareSwitch->setState(SystemConf::getInstance()->getBool("wifi.ap.share"));
-			s2->addWithLabel(_("SHARE INTERNET"), shareSwitch);
-
-			s2->addEntry(_("START HOTSPOT"), false, [window, shareSwitch] {
+			s2->addEntry(_("START HOTSPOT"), false, [window] {
 				std::string apSsid = SystemConf::getInstance()->get("wifi.ap.ssid");
 				std::string apKey = SystemConf::getInstance()->get("wifi.ap.key");
-				bool share = shareSwitch->getState();
-				SystemConf::getInstance()->setBool("wifi.ap.share", share);
-
-				if (apSsid.empty()) {
-					window->pushGui(new GuiMsgBox(window, _("PLEASE SET A HOTSPOT SSID")));
-					return;
-				}
-
+				if (apSsid.empty()) { window->pushGui(new GuiMsgBox(window, _("PLEASE SET A HOTSPOT SSID"))); return; }
 				window->pushGui(new GuiLoading<bool>(window, _("STARTING HOTSPOT..."),
-					[apSsid, apKey, share](auto gui) {
-						return RxnmNetwork::startAP(apSsid, apKey, share);
+					[apSsid, apKey](auto gui) {
+						RxnmNetwork::exec("wifi ap start \"" + apSsid + "\" --password \"" + apKey + "\" --share");
+						return RxnmNetwork::reload();
 					},
-					[window](bool success) {
-						window->pushGui(new GuiMsgBox(window,
-							success ? _("HOTSPOT STARTED") : _("HOTSPOT FAILED")));
-					}));
+					[window](bool ok) { window->pushGui(new GuiMsgBox(window, ok ? _("HOTSPOT STARTED") : _("HOTSPOT FAILED"))); }));
 			});
 
 			s2->addEntry(_("STOP HOTSPOT"), false, [window] {
-				window->pushGui(new GuiLoading<bool>(window, _("STOPPING HOTSPOT..."),
-					[](auto gui) { return RxnmNetwork::stopAP(); },
-					[window](bool success) {
-						window->pushGui(new GuiMsgBox(window, _("HOTSPOT STOPPED")));
-					}));
+				window->pushGui(new GuiLoading<bool>(window, _("STOPPING..."),
+					[](auto gui) { RxnmNetwork::exec("wifi disconnect"); return RxnmNetwork::reload(); },
+					[window](bool ok) { window->pushGui(new GuiMsgBox(window, _("HOTSPOT STOPPED"))); }));
 			});
-
 			window->pushGui(s2);
 		});
 
 		// INTERNET CHECK
 		s->addEntry(_("CHECK INTERNET"), false, [window] {
 			window->pushGui(new GuiLoading<bool>(window, _("CHECKING CONNECTIVITY..."),
-				[](auto gui) { return RxnmNetwork::checkInternet(); },
-				[window](bool connected) {
-					window->pushGui(new GuiMsgBox(window,
-						connected ? _("INTERNET: CONNECTED") : _("INTERNET: NOT CONNECTED")));
+				[](auto gui) { return RxnmNetwork::exec("system check internet"); },
+				[window](bool ok) {
+					window->pushGui(new GuiMsgBox(window, ok ? _("INTERNET: CONNECTED") : _("INTERNET: NOT CONNECTED")));
 				}));
 		});
 
 		// PROFILES
 		s->addGroup(_("NETWORK PROFILES"));
-
 		s->addEntry(_("SAVE PROFILE"), false, [window] {
 			auto updateVal = [window](const std::string& name) {
 				if (name.empty()) return;
 				window->pushGui(new GuiLoading<bool>(window, _("SAVING PROFILE..."),
-					[name](auto gui) { return RxnmNetwork::saveProfile(name); },
-					[window, name](bool success) {
-						window->pushGui(new GuiMsgBox(window,
-							success ? _("PROFILE SAVED") : _("PROFILE SAVE FAILED")));
-					}));
+					[name](auto gui) { return RxnmNetwork::exec("profile save \"" + name + "\""); },
+					[window](bool ok) { window->pushGui(new GuiMsgBox(window, ok ? _("PROFILE SAVED") : _("SAVE FAILED"))); }));
 			};
 			if (Settings::getInstance()->getBool("UseOSK"))
 				window->pushGui(new GuiTextEditPopupKeyboard(window, _("PROFILE NAME"), "", updateVal, false));
@@ -5386,37 +5361,10 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 				window->pushGui(new GuiTextEditPopup(window, _("PROFILE NAME"), "", updateVal, false));
 		});
 
-		s->addEntry(_("LOAD PROFILE"), true, [window] {
-			window->pushGui(new GuiLoading<std::vector<std::string>>(window,
-				_("LOADING PROFILES..."),
-				[](auto gui) { return RxnmNetwork::listProfiles(); },
-				[window](std::vector<std::string> profiles) {
-					auto s2 = new GuiSettings(window, _("LOAD PROFILE"));
-					if (profiles.empty()) {
-						s2->addEntry(_("NO SAVED PROFILES"), false, nullptr);
-					} else {
-						for (auto& name : profiles) {
-							s2->addEntry(name, false, [window, name, s2] {
-								window->pushGui(new GuiLoading<bool>(window, _("LOADING PROFILE..."),
-									[name](auto gui) { return RxnmNetwork::loadProfile(name); },
-									[window, s2](bool success) {
-										window->pushGui(new GuiMsgBox(window,
-											success ? _("PROFILE LOADED") : _("PROFILE LOAD FAILED")));
-										delete s2;
-									}));
-							});
-						}
-					}
-					window->pushGui(s2);
-				}));
-		});
-
 		// VPN (WireGuard)
 		s->addGroup(_("VPN"));
-
 		s->addEntry(_("WIREGUARD"), true, [window] {
 			auto s2 = new GuiSettings(window, _("WIREGUARD VPN"));
-
 			s2->addInputTextConfigRow(_("TUNNEL NAME"), "vpn.wg.name", false);
 			s2->addInputTextConfigRow(_("PRIVATE KEY"), "vpn.wg.private_key", true);
 			s2->addInputTextConfigRow(_("PEER PUBLIC KEY"), "vpn.wg.peer_key", false);
@@ -5425,37 +5373,27 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 			s2->addInputTextConfigRow(_("ADDRESS"), "vpn.wg.address", false);
 
 			s2->addEntry(_("CONNECT"), false, [window] {
-				RxnmNetwork::VpnConfig cfg;
-				cfg.name = SystemConf::getInstance()->get("vpn.wg.name");
-				cfg.privateKey = SystemConf::getInstance()->get("vpn.wg.private_key");
-				cfg.peerKey = SystemConf::getInstance()->get("vpn.wg.peer_key");
-				cfg.endpoint = SystemConf::getInstance()->get("vpn.wg.endpoint");
-				cfg.allowedIps = SystemConf::getInstance()->get("vpn.wg.allowed_ips");
-				cfg.address = SystemConf::getInstance()->get("vpn.wg.address");
-
-				if (cfg.name.empty()) {
-					window->pushGui(new GuiMsgBox(window, _("PLEASE SET A TUNNEL NAME")));
-					return;
-				}
-
+				std::string n = SystemConf::getInstance()->get("vpn.wg.name");
+				if (n.empty()) { window->pushGui(new GuiMsgBox(window, _("PLEASE SET A TUNNEL NAME"))); return; }
+				std::string cmd = "vpn wireguard connect \"" + n + "\"";
+				std::string k;
+				k = SystemConf::getInstance()->get("vpn.wg.private_key"); if (!k.empty()) cmd += " --private-key \"" + k + "\"";
+				k = SystemConf::getInstance()->get("vpn.wg.peer_key"); if (!k.empty()) cmd += " --peer-key \"" + k + "\"";
+				k = SystemConf::getInstance()->get("vpn.wg.endpoint"); if (!k.empty()) cmd += " --endpoint \"" + k + "\"";
+				k = SystemConf::getInstance()->get("vpn.wg.allowed_ips"); if (!k.empty()) cmd += " --allowed-ips \"" + k + "\"";
+				k = SystemConf::getInstance()->get("vpn.wg.address"); if (!k.empty()) cmd += " --address \"" + k + "\"";
 				window->pushGui(new GuiLoading<bool>(window, _("CONNECTING VPN..."),
-					[cfg](auto gui) { return RxnmNetwork::vpnConnect(cfg); },
-					[window](bool success) {
-						window->pushGui(new GuiMsgBox(window,
-							success ? _("VPN CONNECTED") : _("VPN CONNECTION FAILED")));
-					}));
+					[cmd](auto gui) { bool ok = RxnmNetwork::exec(cmd); RxnmNetwork::reload(); return ok; },
+					[window](bool ok) { window->pushGui(new GuiMsgBox(window, ok ? _("VPN CONNECTED") : _("VPN FAILED"))); }));
 			});
 
 			s2->addEntry(_("DISCONNECT"), false, [window] {
-				std::string name = SystemConf::getInstance()->get("vpn.wg.name");
-				if (name.empty()) return;
-				window->pushGui(new GuiLoading<bool>(window, _("DISCONNECTING VPN..."),
-					[name](auto gui) { return RxnmNetwork::vpnDisconnect(name); },
-					[window](bool success) {
-						window->pushGui(new GuiMsgBox(window, _("VPN DISCONNECTED")));
-					}));
+				std::string n = SystemConf::getInstance()->get("vpn.wg.name");
+				if (n.empty()) return;
+				window->pushGui(new GuiLoading<bool>(window, _("DISCONNECTING..."),
+					[n](auto gui) { RxnmNetwork::exec("vpn wireguard disconnect \"" + n + "\""); return RxnmNetwork::reload(); },
+					[window](bool ok) { window->pushGui(new GuiMsgBox(window, _("VPN DISCONNECTED"))); }));
 			});
-
 			window->pushGui(s2);
 		});
 

@@ -60,3 +60,6 @@ CPackSourceConfig.cmake
 # backup files
 *.orig
 *.rej
+*.bak
+repomix-output.xml
+package-lock.json

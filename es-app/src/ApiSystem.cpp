@@ -441,8 +441,14 @@ bool ApiSystem::launchFileManager(Window *window)
 bool ApiSystem::enableWifi(std::string ssid, std::string key, std::string country)
 {
 #ifdef ROCKNIX
-	if (RxnmNetwork::isAvailable())
-		return RxnmNetwork::enableWifi(ssid, key, country);
+	if (RxnmNetwork::isAvailable()) {
+		system("rfkill unblock wifi");
+		if (!country.empty())
+			RxnmNetwork::exec("wifi country " + country);
+		bool ok = RxnmNetwork::exec("wifi connect \"" + ssid + "\" --password \"" + key + "\"");
+		RxnmNetwork::reload();
+		return ok;
+	}
 #endif
 	bool ret;
 
@@ -469,8 +475,12 @@ bool ApiSystem::enableWifi(std::string ssid, std::string key)
 bool ApiSystem::disableWifi()
 {
 #ifdef ROCKNIX
-	if (RxnmNetwork::isAvailable())
-		return RxnmNetwork::disableWifi();
+	if (RxnmNetwork::isAvailable()) {
+		RxnmNetwork::exec("wifi disconnect");
+		RxnmNetwork::reload();
+		system("rfkill block wifi");
+		return true;
+	}
 #endif
 	return executeScript("wifictl disable");
 }
@@ -1724,7 +1734,7 @@ std::vector<std::string> ApiSystem::getWifiNetworks(bool scan)
 {
 #ifdef ROCKNIX
 	if (RxnmNetwork::isAvailable()) {
-		auto networks = scan ? RxnmNetwork::scanNetworks() : RxnmNetwork::listNetworks();
+		auto networks = RxnmNetwork::scanNetworks();
 		std::vector<std::string> result;
 		for (auto& n : networks)
 			result.push_back(n.ssid);

@@ -77,8 +77,9 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 					_("YES"), [window, ssid] {
 						window->pushGui(new GuiLoading<bool>(window, _("FORGETTING NETWORK..."),
 							[ssid](auto gui) {
-								RxnmNetwork::disconnectWifi();
-								return RxnmNetwork::forgetNetwork(ssid);
+								RxnmNetwork::exec("wifi disconnect");
+								RxnmNetwork::exec("wifi forget \"" + ssid + "\"");
+								return RxnmNetwork::reload();
 							},
 							[window](bool success) {
 								window->pushGui(new GuiMsgBox(window,
@@ -127,7 +128,7 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 
 	addEntry(_("SET DHCP"), false, [window, ifName] {
 		window->pushGui(new GuiLoading<bool>(window, _("SETTING DHCP..."),
-			[ifName](auto gui) { return RxnmNetwork::setInterfaceDhcp(ifName); },
+			[ifName](auto gui) { bool ok = RxnmNetwork::exec("interface " + ifName + " set dhcp"); RxnmNetwork::reload(); return ok; },
 			[window](bool success) {
 				window->pushGui(new GuiMsgBox(window,
 					success ? _("DHCP CONFIGURED") : _("FAILED")));
@@ -138,7 +139,7 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 		auto updateVal = [window, ifName](const std::string& ip) {
 			if (ip.empty()) return;
 			window->pushGui(new GuiLoading<bool>(window, _("SETTING STATIC IP..."),
-				[ifName, ip](auto gui) { return RxnmNetwork::setInterfaceStatic(ifName, ip); },
+				[ifName, ip](auto gui) { bool ok = RxnmNetwork::exec("interface " + ifName + " set static " + ip); RxnmNetwork::reload(); return ok; },
 				[window](bool success) {
 					window->pushGui(new GuiMsgBox(window,
 						success ? _("STATIC IP CONFIGURED") : _("FAILED")));
@@ -158,7 +159,7 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 	addWithLabel(_("NULLIFY MODE"), nullifySwitch);
 	addSaveFunc([nullifySwitch, ifName, initialNullify] {
 		if (nullifySwitch->getState() != initialNullify)
-			RxnmNetwork::setInterfaceNullify(ifName, nullifySwitch->getState());
+			RxnmNetwork::exec(std::string("system nullify ") + (nullifySwitch->getState() ? "enable" : "disable") + " --interface " + ifName);
 	});
 }
 
