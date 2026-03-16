@@ -125,8 +125,12 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
                 }
             }
 
-            // Routes — extract default gateway from routes array
-            if (obj.HasMember("routes") && obj["routes"].IsArray()) {
+            // Gateway — top-level field per schema
+            if (obj.HasMember("gateway") && obj["gateway"].IsString())
+                iface.ipv4Gateway = stripCidr(obj["gateway"].GetString());
+
+            // Routes fallback — extract default gateway from routes array ("gw" per schema)
+            if (iface.ipv4Gateway.empty() && obj.HasMember("routes") && obj["routes"].IsArray()) {
                 const auto& routes = obj["routes"];
                 for (rapidjson::SizeType i = 0; i < routes.Size(); i++) {
                     if (!routes[i].IsObject()) continue;
@@ -134,8 +138,8 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
                     if (r.HasMember("dst") && r["dst"].IsString()) {
                         std::string dst = r["dst"].GetString();
                         if (dst == "default" || dst == "0.0.0.0/0") {
-                            if (r.HasMember("gateway") && r["gateway"].IsString())
-                                iface.ipv4Gateway = stripCidr(r["gateway"].GetString());
+                            if (r.HasMember("gw") && r["gw"].IsString())
+                                iface.ipv4Gateway = stripCidr(r["gw"].GetString());
                         }
                     }
                 }
@@ -240,29 +244,33 @@ std::vector<RxnmNetwork::WifiNetwork> RxnmNetwork::listNetworks(const std::strin
 bool RxnmNetwork::enableWifi(const std::string& ssid, const std::string& password,
                              const std::string& country)
 {
-    // 1. Unblock WiFi radio (same as wifictl enable)
+    // 1. Unblock WiFi radio
     system("rfkill unblock wifi");
 
     // 2. Set regulatory country code if provided
     if (!country.empty())
-        execRxnm("wifi country " + country);
+        execRxnm("wifi country " + country + " --json");
 
-    // 3. Connect to network
-    return connectWifi(ssid, password);
+    // 3. Connect to network (rxnm internally calls reconfigure_iface for DHCP)
+    bool result = connectWifi(ssid, password);
+
+    // 4. Ensure networkd picks up any config changes
+    execRxnm("system reload --json");
+
+    return result;
 }
 
 bool RxnmNetwork::disableWifi()
 {
     disconnectWifi();
+    execRxnm("system reload --json");
     system("rfkill block wifi");
     return true;
 }
 
 bool RxnmNetwork::connectWifi(const std::string& ssid, const std::string& password, bool hidden)
 {
-    std::string cmd = "wifi connect --ssid \"" + ssid + "\"";
-    if (!password.empty())
-        cmd += " --password \"" + password + "\"";
+    std::string cmd = "wifi connect \"" + ssid + "\" --password \"" + password + "\"";
     if (hidden)
         cmd += " --hidden";
     cmd += " --json";
@@ -276,8 +284,12 @@ bool RxnmNetwork::connectWifi(const std::string& ssid, const std::string& passwo
     if (doc.HasParseError())
         return false;
 
-    if (doc.HasMember("status") && doc["status"].IsString())
-        return std::string(doc["status"].GetString()) == "success";
+    // rxnm OutputResponse: {"success": bool, ...}
+    // ActionResponse may also have: {"connected": bool, "ssid": "...", ...}
+    if (doc.HasMember("success") && doc["success"].IsBool())
+        return doc["success"].GetBool();
+    if (doc.HasMember("connected") && doc["connected"].IsBool())
+        return doc["connected"].GetBool();
 
     return false;
 }
