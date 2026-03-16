@@ -4,6 +4,9 @@
 #include "ThemeData.h"
 #include "ApiSystem.h"
 #include "views/UIModeController.h"
+#include <cstdio>
+#include <fstream>
+#include <sstream>
 
 
 GuiSystemInformation::GuiSystemInformation(Window* window) : GuiSettings(window, _("INFORMATION").c_str())
@@ -59,6 +62,56 @@ GuiSystemInformation::GuiSystemInformation(Window* window) : GuiSettings(window,
 			}
 		}
 	}
+
+#ifdef ROCKNIX
+	// Memory usage from /proc/meminfo
+	{
+		auto readMemInfo = [](const std::string& key) -> long {
+			std::ifstream f("/proc/meminfo");
+			std::string line;
+			while (std::getline(f, line)) {
+				if (line.find(key) == 0) {
+					long val = 0;
+					sscanf(line.c_str() + key.size(), " %ld", &val);
+					return val; // kB
+				}
+			}
+			return 0;
+		};
+
+		long totalKB = readMemInfo("MemTotal:");
+		long availKB = readMemInfo("MemAvailable:");
+		long swapTotalKB = readMemInfo("SwapTotal:");
+		long swapFreeKB = readMemInfo("SwapFree:");
+
+		addGroup(_("MEMORY"));
+
+		long usedMB = (totalKB - availKB) / 1024;
+		long totalMB = totalKB / 1024;
+		std::string ramStr = std::to_string(usedMB) + " / " + std::to_string(totalMB) + " MB";
+		addWithLabel(_("RAM USAGE"), std::make_shared<TextComponent>(window, ramStr, font, color));
+
+		if (swapTotalKB > 0) {
+			long swapUsedMB = (swapTotalKB - swapFreeKB) / 1024;
+			long swapTotalMB = swapTotalKB / 1024;
+			std::string swapStr = std::to_string(swapUsedMB) + " / " + std::to_string(swapTotalMB) + " MB";
+			addWithLabel(_("SWAP USAGE"), std::make_shared<TextComponent>(window, swapStr, font, color));
+		}
+
+		// ZRAM stats
+		std::ifstream zramStat("/sys/block/zram0/mm_stat");
+		if (zramStat.good()) {
+			long orig = 0, compr = 0;
+			zramStat >> orig >> compr;
+			if (compr > 0) {
+				long origMB = orig / 1024 / 1024;
+				long comprMB = compr / 1024 / 1024;
+				std::string zramStr = std::to_string(comprMB) + " MB (" + std::to_string(origMB) + " MB data)";
+				addWithLabel(_("ZRAM COMPRESSED"), std::make_shared<TextComponent>(window, zramStr, font, color));
+			}
+		}
+	}
+#endif
 
 	addGroup(_("VIDEO DRIVER"));
 	for (auto info : Renderer::getDriverInformation())

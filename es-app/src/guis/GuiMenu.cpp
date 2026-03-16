@@ -2059,6 +2059,63 @@ void GuiMenu::openSystemSettings()
 		dtbOverlayItem(mWindow, s, "custom");
 	}
 
+#ifdef ROCKNIX
+	if (Utils::FileSystem::exists("/usr/bin/rocknix-memory-manager")) {
+		if (!Utils::FileSystem::exists("/usr/bin/dtb_overlay"))
+			s->addGroup(_("TWEAKS"));
+
+		s->addEntry(_("MEMORY MANAGER"), true, [window] {
+			auto mm = new GuiSettings(window, _("MEMORY MANAGER").c_str());
+			auto theme = ThemeData::getMenuTheme();
+			auto font = theme->Text.font;
+			auto color = theme->Text.color;
+
+			// Current ZRAM config
+			auto zramOpts = std::make_shared<OptionListComponent<std::string>>(window, _("ZRAM SIZE"), false);
+			std::string curZram = SystemConf::getInstance()->get("memory.zram_size");
+			if (curZram.empty()) curZram = "auto";
+			zramOpts->add(_("OFF"), "0", curZram == "0");
+			zramOpts->add(_("AUTO"), "auto", curZram == "auto");
+			zramOpts->add("256 MB", "256", curZram == "256");
+			zramOpts->add("512 MB", "512", curZram == "512");
+			zramOpts->add("1024 MB", "1024", curZram == "1024");
+			mm->addWithLabel(_("ZRAM SIZE"), zramOpts);
+			mm->addSaveFunc([zramOpts] {
+				SystemConf::getInstance()->set("memory.zram_size", zramOpts->getSelected());
+				Utils::Platform::runSystemCommand("rocknix-memory-manager --zram-size " + zramOpts->getSelected() + " --reload", "", nullptr);
+			});
+
+			// ZRAM algorithm
+			auto algoOpts = std::make_shared<OptionListComponent<std::string>>(window, _("ZRAM ALGORITHM"), false);
+			std::string curAlgo = SystemConf::getInstance()->get("memory.zram_algo");
+			if (curAlgo.empty()) curAlgo = "lz4";
+			algoOpts->add("lz4", "lz4", curAlgo == "lz4");
+			algoOpts->add("zstd", "zstd", curAlgo == "zstd");
+			algoOpts->add("lzo-rle", "lzo-rle", curAlgo == "lzo-rle");
+			mm->addWithLabel(_("ZRAM ALGORITHM"), algoOpts);
+			mm->addSaveFunc([algoOpts] {
+				SystemConf::getInstance()->set("memory.zram_algo", algoOpts->getSelected());
+				Utils::Platform::runSystemCommand("rocknix-memory-manager --zram-algo " + algoOpts->getSelected() + " --reload", "", nullptr);
+			});
+
+			// KSM toggle
+			auto ksmOpts = std::make_shared<OptionListComponent<std::string>>(window, _("KSM MODE"), false);
+			std::string curKsm = SystemConf::getInstance()->get("memory.ksm");
+			if (curKsm.empty()) curKsm = "auto";
+			ksmOpts->add(_("AUTO"), "auto", curKsm == "auto");
+			ksmOpts->add(_("ON"), "enable", curKsm == "enable");
+			ksmOpts->add(_("OFF"), "disable", curKsm == "disable");
+			mm->addWithLabel(_("KERNEL SAMEPAGE MERGING"), ksmOpts);
+			mm->addSaveFunc([ksmOpts] {
+				SystemConf::getInstance()->set("memory.ksm", ksmOpts->getSelected());
+				Utils::Platform::runSystemCommand("rocknix-memory-manager --ksm " + ksmOpts->getSelected() + " --reload", "", nullptr);
+			});
+
+			window->pushGui(mm);
+		});
+	}
+#endif
+
 #if defined(AMD64) || defined(RK3326) || defined(RK3566) || defined(RK3588) || defined(RK3399) || defined(SM8250)
 	// Allow user control over how the device sleeps - only show for devices with real suspend enabled
 	s->addGroup(_("SUSPEND"));
