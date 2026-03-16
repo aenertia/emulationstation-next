@@ -48,7 +48,8 @@ set(ES_HEADERS
 	${CMAKE_CURRENT_SOURCE_DIR}/src/ThreadedBluetooth.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/SystemRandomPlaylist.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/LangParser.h
-	${CMAKE_CURRENT_SOURCE_DIR}/src/KeyboardMapping.h	
+	${CMAKE_CURRENT_SOURCE_DIR}/src/KeyboardMapping.h
+	${CMAKE_CURRENT_SOURCE_DIR}/src/RxnmNetwork.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/services/HttpServerThread.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/services/HttpApi.h
 	${CMAKE_CURRENT_SOURCE_DIR}/src/services/httplib.h
@@ -161,6 +162,7 @@ set(ES_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/SystemRandomPlaylist.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/LangParser.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/KeyboardMapping.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/RxnmNetwork.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/services/HttpServerThread.cpp	
 	${CMAKE_CURRENT_SOURCE_DIR}/src/services/HttpApi.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/RetroAchievements.cpp

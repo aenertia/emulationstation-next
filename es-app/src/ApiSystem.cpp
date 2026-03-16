@@ -13,6 +13,9 @@
 #include "utils/StringUtil.h"
 #include "utils/ThreadPool.h"
 #include "RetroAchievements.h"
+#ifdef ROCKNIX
+#include "RxnmNetwork.h"
+#endif
 #include "utils/ZipFile.h"
 #include "Paths.h"
 #include "utils/VectorEx.h"
@@ -435,18 +438,22 @@ bool ApiSystem::launchFileManager(Window *window)
 }
 
 #if !WIN32
-bool ApiSystem::enableWifi(std::string ssid, std::string key, std::string country) 
+bool ApiSystem::enableWifi(std::string ssid, std::string key, std::string country)
 {
+#ifdef ROCKNIX
+	if (RxnmNetwork::isAvailable())
+		return RxnmNetwork::connectWifi(ssid, key);
+#endif
 	bool ret;
 
 	ret = executeScript("wifictl enable");
 	if (!ret)
 		return ret;
-	
+
 	return executeScript("wifictl connect \"" + ssid + "\" \"" + key + "\" \"" + country + "\"");
 }
 #else
-bool ApiSystem::enableWifi(std::string ssid, std::string key) 
+bool ApiSystem::enableWifi(std::string ssid, std::string key)
 {
 	// Escape single quote if it's in the passphrase
 	using std::regex;
@@ -459,15 +466,24 @@ bool ApiSystem::enableWifi(std::string ssid, std::string key)
 }
 #endif
 
-bool ApiSystem::disableWifi() 
+bool ApiSystem::disableWifi()
 {
+#ifdef ROCKNIX
+	if (RxnmNetwork::isAvailable())
+		return RxnmNetwork::disconnectWifi();
+#endif
 	return executeScript("wifictl disable");
 }
 
 std::string ApiSystem::getIpAddress()
 {
 	LOG(LogDebug) << "ApiSystem::getIpAddress";
-	
+
+#ifdef ROCKNIX
+	if (RxnmNetwork::isAvailable())
+		return RxnmNetwork::getIpAddress();
+#endif
+
 	std::string result = Utils::Platform::queryIPAddress(); // platform.h
 	if (result.empty())
 		return "NOT CONNECTED";
@@ -1706,6 +1722,15 @@ void ApiSystem::setLEDEnabled(bool enabled)
 
 std::vector<std::string> ApiSystem::getWifiNetworks(bool scan)
 {
+#ifdef ROCKNIX
+	if (RxnmNetwork::isAvailable()) {
+		auto networks = scan ? RxnmNetwork::scanNetworks() : RxnmNetwork::listNetworks();
+		std::vector<std::string> result;
+		for (auto& n : networks)
+			result.push_back(n.ssid);
+		return result;
+	}
+#endif
 	return executeEnumerationScript(scan ? "wifictl scanlist" : "wifictl list");
 }
 
