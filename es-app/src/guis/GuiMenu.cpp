@@ -5172,6 +5172,13 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 			});
 			s->addRow(row);
 		}
+		// Global Nullify Mode toggle
+		auto nullifySwitch = std::make_shared<SwitchComponent>(mWindow);
+		nullifySwitch->setState(sysStatus.globalNullify);
+		s->addWithLabel(_("NULLIFY MODE"), nullifySwitch);
+		s->addSaveFunc([nullifySwitch] {
+			RxnmNetwork::setGlobalNullify(nullifySwitch->getState());
+		});
 	} else {
 #endif
 	auto ip = std::make_shared<TextComponent>(mWindow, ApiSystem::getInstance()->getIpAddress(), font, color);

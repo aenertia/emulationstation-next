@@ -63,8 +63,9 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
             if (obj.HasMember("type") && obj["type"].IsString())
                 iface.type = obj["type"].GetString();
 
-            // Skip loopback, bridge, sit interfaces
-            if (iface.type == "loopback" || iface.type == "bridge" || iface.type == "sit")
+            // Skip loopback, bridge, sit/tunnel interfaces (by type or name)
+            if (iface.type == "loopback" || iface.type == "bridge" || iface.type == "sit"
+                || iface.type == "tunnel" || iface.name == "sit0" || iface.name == "lo")
                 continue;
 
             if (obj.HasMember("state") && obj["state"].IsString())
@@ -77,6 +78,9 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
                 iface.mtu = obj["mtu"].GetInt();
 
             iface.connected = (iface.state == "connected" || iface.state == "routable");
+
+            if (obj.HasMember("nullified") && obj["nullified"].IsBool())
+                iface.isNullified = obj["nullified"].GetBool();
 
             // IPv4
             if (obj.HasMember("ipv4") && obj["ipv4"].IsObject()) {
@@ -253,4 +257,19 @@ std::string RxnmNetwork::getIpAddress()
             return pair.second.ipv4Address;
     }
     return "NOT CONNECTED";
+}
+
+bool RxnmNetwork::setGlobalNullify(bool enable)
+{
+    std::string cmd = std::string("system nullify ") + (enable ? "enable" : "disable") + " --json";
+    std::string json = execRxnm(cmd);
+    return !json.empty();
+}
+
+bool RxnmNetwork::setInterfaceNullify(const std::string& iface, bool enable)
+{
+    std::string cmd = std::string("system nullify ") + (enable ? "enable" : "disable")
+        + " --interface " + iface + " --json";
+    std::string json = execRxnm(cmd);
+    return !json.empty();
 }

@@ -63,6 +63,10 @@ public:
     // IP address helper (returns first connected interface's IPv4)
     static std::string getIpAddress();
 
+    // Power management (Nullify Mode)
+    static bool setGlobalNullify(bool enable);
+    static bool setInterfaceNullify(const std::string& iface, bool enable);
+
     // Check if rxnm binary is available
     static bool isAvailable();
 

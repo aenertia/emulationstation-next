@@ -3,6 +3,7 @@
 #include "GuiNetworkInterface.h"
 #include "components/SwitchComponent.h"
 #include "components/OptionListComponent.h"
+#include "components/TextComponent.h"
 #include "SystemConf.h"
 #include "LocaleES.h"
 
@@ -59,6 +60,16 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 	auto typeText = std::make_shared<TextComponent>(window,
 		info.type.empty() ? "N/A" : info.type, font, color);
 	addWithLabel(_("TYPE"), typeText);
+
+	addGroup(_("POWER MANAGEMENT"));
+
+	auto nullifySwitch = std::make_shared<SwitchComponent>(window);
+	nullifySwitch->setState(info.isNullified);
+	addWithLabel(_("NULLIFY MODE"), nullifySwitch);
+	std::string ifName = ifaceName;
+	addSaveFunc([nullifySwitch, ifName] {
+		RxnmNetwork::setInterfaceNullify(ifName, nullifySwitch->getState());
+	});
 }
 
 void GuiNetworkInterface::update(int deltaTime)
