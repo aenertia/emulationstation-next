@@ -82,24 +82,58 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
             if (obj.HasMember("nullified") && obj["nullified"].IsBool())
                 iface.isNullified = obj["nullified"].GetBool();
 
-            // IPv4
-            if (obj.HasMember("ipv4") && obj["ipv4"].IsObject()) {
+            // Primary IP (rxnm "ip" field — first routable address)
+            if (obj.HasMember("ip") && obj["ip"].IsString())
+                iface.ipv4Address = obj["ip"].GetString();
+
+            // IPv4 array — rxnm returns ["addr/prefix", ...], use first non-link-local
+            if (obj.HasMember("ipv4") && obj["ipv4"].IsArray()) {
                 const auto& v4 = obj["ipv4"];
-                iface.ipv4Enabled = true;
-                if (v4.HasMember("address") && v4["address"].IsString())
-                    iface.ipv4Address = v4["address"].GetString();
-                if (v4.HasMember("gateway") && v4["gateway"].IsString())
-                    iface.ipv4Gateway = v4["gateway"].GetString();
+                iface.ipv4Enabled = (v4.Size() > 0);
+                for (rapidjson::SizeType i = 0; i < v4.Size(); i++) {
+                    if (!v4[i].IsString()) continue;
+                    std::string addr = v4[i].GetString();
+                    // Prefer non-link-local (169.254.x.x) address
+                    if (addr.substr(0, 8) != "169.254.") {
+                        iface.ipv4Address = addr;
+                        break;
+                    }
+                    if (iface.ipv4Address.empty())
+                        iface.ipv4Address = addr;
+                }
             }
 
-            // IPv6
-            if (obj.HasMember("ipv6") && obj["ipv6"].IsObject()) {
+            // IPv6 array — rxnm returns ["addr/prefix", ...], use first global
+            if (obj.HasMember("ipv6") && obj["ipv6"].IsArray()) {
                 const auto& v6 = obj["ipv6"];
-                iface.ipv6Enabled = true;
-                if (v6.HasMember("address") && v6["address"].IsString())
-                    iface.ipv6Address = v6["address"].GetString();
-                if (v6.HasMember("gateway") && v6["gateway"].IsString())
-                    iface.ipv6Gateway = v6["gateway"].GetString();
+                iface.ipv6Enabled = (v6.Size() > 0);
+                for (rapidjson::SizeType i = 0; i < v6.Size(); i++) {
+                    if (!v6[i].IsString()) continue;
+                    std::string addr = v6[i].GetString();
+                    // Prefer global over link-local (fe80::)
+                    if (addr.substr(0, 5) != "fe80:") {
+                        iface.ipv6Address = addr;
+                        break;
+                    }
+                    if (iface.ipv6Address.empty())
+                        iface.ipv6Address = addr;
+                }
+            }
+
+            // Routes — extract default gateway from routes array
+            if (obj.HasMember("routes") && obj["routes"].IsArray()) {
+                const auto& routes = obj["routes"];
+                for (rapidjson::SizeType i = 0; i < routes.Size(); i++) {
+                    if (!routes[i].IsObject()) continue;
+                    const auto& r = routes[i];
+                    if (r.HasMember("dst") && r["dst"].IsString()) {
+                        std::string dst = r["dst"].GetString();
+                        if (dst == "default" || dst == "0.0.0.0/0") {
+                            if (r.HasMember("gateway") && r["gateway"].IsString())
+                                iface.ipv4Gateway = r["gateway"].GetString();
+                        }
+                    }
+                }
             }
 
             status.interfaces[iface.name] = iface;

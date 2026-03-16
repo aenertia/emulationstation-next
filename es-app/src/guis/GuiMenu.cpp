@@ -5152,10 +5152,10 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 			auto& iface = pair.second;
 			std::string label = pair.first;
 
-			// Format type label
+			// Format type label — gadget reports as "ethernet" with name "gadget"
 			if (iface.type == "wifi") label += " (WiFi)";
+			else if (pair.first == "gadget" || iface.type == "gadget") label += " (USB)";
 			else if (iface.type == "ethernet") label += " (Wired)";
-			else if (iface.type == "gadget") label += " (USB)";
 			else if (iface.type == "wireguard") label += " (VPN)";
 
 			std::string ipDisplay = iface.connected ? iface.ipv4Address : _("Not Connected");
