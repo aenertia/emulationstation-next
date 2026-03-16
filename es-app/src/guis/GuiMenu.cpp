@@ -48,6 +48,10 @@
 #include "guis/GuiBackupStart.h"
 #include "guis/GuiTextEditPopup.h"
 #include "guis/GuiWifi.h"
+#ifdef ROCKNIX
+#include "RxnmNetwork.h"
+#include "guis/GuiNetworkInterface.h"
+#endif
 #include "guis/GuiBluetoothPair.h"
 #include "guis/GuiBluetoothDevices.h"
 #include "scrapers/ThreadedScraper.h"
@@ -5135,11 +5139,49 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 	auto s = new GuiSettings(mWindow, _("NETWORK SETTINGS").c_str());
 	s->addGroup(_("INFORMATION"));
 
+#ifdef ROCKNIX
+	if (RxnmNetwork::isAvailable()) {
+		auto sysStatus = RxnmNetwork::getSystemStatus();
+
+		auto hostname = std::make_shared<TextComponent>(mWindow,
+			sysStatus.hostname.empty() ? "ROCKNIX" : sysStatus.hostname, font, color);
+		s->addWithLabel(_("HOSTNAME"), hostname);
+
+		// Interface list with clickable entries
+		for (auto& pair : sysStatus.interfaces) {
+			auto& iface = pair.second;
+			std::string label = pair.first;
+
+			// Format type label
+			if (iface.type == "wifi") label += " (WiFi)";
+			else if (iface.type == "ethernet") label += " (Wired)";
+			else if (iface.type == "gadget") label += " (USB)";
+			else if (iface.type == "wireguard") label += " (VPN)";
+
+			std::string ipDisplay = iface.connected ? iface.ipv4Address : _("Not Connected");
+			if (ipDisplay.empty()) ipDisplay = _("No IP");
+
+			auto ifaceText = std::make_shared<TextComponent>(mWindow, ipDisplay, font, color);
+			ComponentListRow row;
+			row.addElement(std::make_shared<TextComponent>(mWindow, label, font, color), true);
+			row.addElement(ifaceText, false);
+
+			std::string ifName = pair.first;
+			row.makeAcceptInputHandler([window, ifName] {
+				window->pushGui(new GuiNetworkInterface(window, ifName));
+			});
+			s->addRow(row);
+		}
+	} else {
+#endif
 	auto ip = std::make_shared<TextComponent>(mWindow, ApiSystem::getInstance()->getIpAddress(), font, color);
 	s->addWithLabel(_("IP ADDRESS"), ip);
 
 	auto status = std::make_shared<TextComponent>(mWindow, ApiSystem::getInstance()->ping() ? _("CONNECTED") : _("NOT CONNECTED"), font, color);
 	s->addWithLabel(_("INTERNET STATUS"), status);
+#ifdef ROCKNIX
+	}
+#endif
 
 	// Network Indicator
 	auto networkIndicator = std::make_shared<SwitchComponent>(mWindow);
