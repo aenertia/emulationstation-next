@@ -85,6 +85,9 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
                 iface.mtu = obj["mtu"].GetInt();
 
             iface.connected = (iface.state == "connected" || iface.state == "routable");
+            // Prefer explicit "connected" field from rxnm if present
+            if (obj.HasMember("connected") && obj["connected"].IsBool())
+                iface.connected = obj["connected"].GetBool();
 
             if (obj.HasMember("nullified") && obj["nullified"].IsBool())
                 iface.isNullified = obj["nullified"].GetBool();
@@ -131,6 +134,7 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
                 iface.ipv4Gateway = stripCidr(obj["gateway"].GetString());
 
             // Routes fallback — extract default gateway from routes array ("gw" per schema)
+            // Skip IPv6 gateways (contain ':') when populating ipv4Gateway
             if (iface.ipv4Gateway.empty() && obj.HasMember("routes") && obj["routes"].IsArray()) {
                 const auto& routes = obj["routes"];
                 for (rapidjson::SizeType i = 0; i < routes.Size(); i++) {
@@ -139,8 +143,29 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
                     if (r.HasMember("dst") && r["dst"].IsString()) {
                         std::string dst = r["dst"].GetString();
                         if (dst == "default" || dst == "0.0.0.0/0") {
-                            if (r.HasMember("gw") && r["gw"].IsString())
-                                iface.ipv4Gateway = stripCidr(r["gw"].GetString());
+                            if (r.HasMember("gw") && r["gw"].IsString()) {
+                                std::string gw = stripCidr(r["gw"].GetString());
+                                if (gw.find(':') == std::string::npos) {
+                                    iface.ipv4Gateway = gw;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Extract IPv6 default gateway from routes if not yet set
+            if (iface.ipv6Gateway.empty() && obj.HasMember("routes") && obj["routes"].IsArray()) {
+                for (auto& r : obj["routes"].GetArray()) {
+                    if (!r.IsObject()) continue;
+                    if (r.HasMember("dst") && r["dst"].IsString()
+                        && std::string(r["dst"].GetString()) == "default"
+                        && r.HasMember("gw") && r["gw"].IsString()) {
+                        std::string gw = stripCidr(r["gw"].GetString());
+                        if (gw.find(':') != std::string::npos) {
+                            iface.ipv6Gateway = gw;
+                            break;
                         }
                     }
                 }
