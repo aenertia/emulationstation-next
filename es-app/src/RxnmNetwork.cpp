@@ -5,6 +5,7 @@
 #include <rapidjson/document.h>
 #include <cstdio>
 #include <cstring>
+#include <unistd.h>
 
 // Strip CIDR prefix notation: "192.168.1.1/24" -> "192.168.1.1"
 static std::string stripCidr(const std::string& addr) {
@@ -32,7 +33,7 @@ std::string RxnmNetwork::execRxnm(const std::string& args)
 
 bool RxnmNetwork::isAvailable()
 {
-    return system("which rxnm >/dev/null 2>&1") == 0;
+    return access("/usr/bin/rxnm", X_OK) == 0;
 }
 
 RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
