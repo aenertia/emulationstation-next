@@ -6,6 +6,12 @@
 #include <cstdio>
 #include <cstring>
 
+// Strip CIDR prefix notation: "192.168.1.1/24" -> "192.168.1.1"
+static std::string stripCidr(const std::string& addr) {
+    auto pos = addr.find('/');
+    return (pos != std::string::npos) ? addr.substr(0, pos) : addr;
+}
+
 std::string RxnmNetwork::execRxnm(const std::string& args)
 {
     std::string cmd = "rxnm " + args + " 2>/dev/null";
@@ -82,17 +88,13 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
             if (obj.HasMember("nullified") && obj["nullified"].IsBool())
                 iface.isNullified = obj["nullified"].GetBool();
 
-            // Primary IP (rxnm "ip" field — first routable address)
-            if (obj.HasMember("ip") && obj["ip"].IsString())
-                iface.ipv4Address = obj["ip"].GetString();
-
             // IPv4 array — rxnm returns ["addr/prefix", ...], use first non-link-local
             if (obj.HasMember("ipv4") && obj["ipv4"].IsArray()) {
                 const auto& v4 = obj["ipv4"];
                 iface.ipv4Enabled = (v4.Size() > 0);
                 for (rapidjson::SizeType i = 0; i < v4.Size(); i++) {
                     if (!v4[i].IsString()) continue;
-                    std::string addr = v4[i].GetString();
+                    std::string addr = stripCidr(v4[i].GetString());
                     // Prefer non-link-local (169.254.x.x) address
                     if (addr.substr(0, 8) != "169.254.") {
                         iface.ipv4Address = addr;
@@ -102,6 +104,9 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
                         iface.ipv4Address = addr;
                 }
             }
+            // Fallback: use "ip" field if ipv4 array was empty
+            if (iface.ipv4Address.empty() && obj.HasMember("ip") && obj["ip"].IsString())
+                iface.ipv4Address = stripCidr(obj["ip"].GetString());
 
             // IPv6 array — rxnm returns ["addr/prefix", ...], use first global
             if (obj.HasMember("ipv6") && obj["ipv6"].IsArray()) {
@@ -109,7 +114,7 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
                 iface.ipv6Enabled = (v6.Size() > 0);
                 for (rapidjson::SizeType i = 0; i < v6.Size(); i++) {
                     if (!v6[i].IsString()) continue;
-                    std::string addr = v6[i].GetString();
+                    std::string addr = stripCidr(v6[i].GetString());
                     // Prefer global over link-local (fe80::)
                     if (addr.substr(0, 5) != "fe80:") {
                         iface.ipv6Address = addr;
@@ -130,7 +135,7 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
                         std::string dst = r["dst"].GetString();
                         if (dst == "default" || dst == "0.0.0.0/0") {
                             if (r.HasMember("gateway") && r["gateway"].IsString())
-                                iface.ipv4Gateway = r["gateway"].GetString();
+                                iface.ipv4Gateway = stripCidr(r["gateway"].GetString());
                         }
                     }
                 }

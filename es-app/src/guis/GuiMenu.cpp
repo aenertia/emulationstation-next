@@ -5200,35 +5200,49 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 	if (RxnmNetwork::isAvailable()) {
 		auto sysStatus = RxnmNetwork::getSystemStatus();
 
+		// Helper to strip CIDR prefix notation (e.g. "192.168.1.1/24" -> "192.168.1.1")
+		auto stripCidr = [](const std::string& addr) -> std::string {
+			auto pos = addr.find('/');
+			return (pos != std::string::npos) ? addr.substr(0, pos) : addr;
+		};
+
 		auto hostname = std::make_shared<TextComponent>(mWindow,
 			sysStatus.hostname.empty() ? "ROCKNIX" : sysStatus.hostname, font, color);
 		s->addWithLabel(_("HOSTNAME"), hostname);
 
-		// Interface list with clickable entries
+		s->addGroup(_("INTERFACES"));
+
+		// Interface list — clickable entries that open per-interface detail view
 		for (auto& pair : sysStatus.interfaces) {
 			auto& iface = pair.second;
-			std::string label = pair.first;
+			std::string typeLabel;
 
-			// Format type label — gadget reports as "ethernet" with name "gadget"
-			if (iface.type == "wifi") label += " (WiFi)";
-			else if (pair.first == "gadget" || iface.type == "gadget") label += " (USB)";
-			else if (iface.type == "ethernet") label += " (Wired)";
-			else if (iface.type == "wireguard") label += " (VPN)";
+			if (iface.type == "wifi") typeLabel = "WiFi";
+			else if (pair.first == "gadget" || iface.type == "gadget") typeLabel = "USB";
+			else if (iface.type == "ethernet") typeLabel = "Wired";
+			else if (iface.type == "wireguard") typeLabel = "VPN";
+			else typeLabel = iface.type;
 
-			std::string ipDisplay = iface.connected ? iface.ipv4Address : _("Not Connected");
-			if (ipDisplay.empty()) ipDisplay = _("No IP");
+			std::string ipStr;
+			if (iface.connected && !iface.ipv4Address.empty())
+				ipStr = stripCidr(iface.ipv4Address);
+			else if (iface.connected && !iface.ipv6Address.empty())
+				ipStr = stripCidr(iface.ipv6Address);
 
-			auto ifaceText = std::make_shared<TextComponent>(mWindow, ipDisplay, font, color);
-			ComponentListRow row;
-			row.addElement(std::make_shared<TextComponent>(mWindow, label, font, color), true);
-			row.addElement(ifaceText, false);
+			std::string entryLabel = pair.first + " (" + typeLabel + ")";
+			if (!ipStr.empty())
+				entryLabel += "  " + ipStr;
+			else if (!iface.connected)
+				entryLabel += "  " + _("Not Connected");
 
 			std::string ifName = pair.first;
-			row.makeAcceptInputHandler([window, ifName] {
+			s->addEntry(entryLabel, true, [window, ifName] {
 				window->pushGui(new GuiNetworkInterface(window, ifName));
 			});
-			s->addRow(row);
 		}
+
+		s->addGroup(_("POWER MANAGEMENT"));
+
 		// Global Nullify Mode toggle
 		auto nullifySwitch = std::make_shared<SwitchComponent>(mWindow);
 		nullifySwitch->setState(sysStatus.globalNullify);
