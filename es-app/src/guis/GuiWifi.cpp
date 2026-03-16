@@ -30,7 +30,7 @@ GuiWifi::GuiWifi(Window* window, const std::string title, std::string data, cons
 		load(ssids);
 
 	mMenu.addButton(_("REFRESH"), "refresh", [&] { onRefresh(); });
-	mMenu.addButton(_("INPUT MANUALLY"), "manual input", [&] { onManualInput(); });
+	mMenu.addButton(_("CONNECT HIDDEN"), "manual input", [&] { onManualInput(); });
 	mMenu.addButton(_("BACK"), "back", [&] { delete this; });
 
 	if (Renderer::ScreenSettings::fullScreenMenus())
