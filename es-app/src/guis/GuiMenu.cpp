@@ -2080,9 +2080,11 @@ void GuiMenu::openSystemSettings()
 			zramOpts->add("512 MB", "512", curZram == "512");
 			zramOpts->add("1024 MB", "1024", curZram == "1024");
 			mm->addWithLabel(_("ZRAM SIZE"), zramOpts);
-			mm->addSaveFunc([zramOpts] {
-				SystemConf::getInstance()->set("memory.zram_size", zramOpts->getSelected());
-				Utils::Platform::runSystemCommand("rocknix-memory-manager --zram-size " + zramOpts->getSelected() + " --reload", "", nullptr);
+			mm->addSaveFunc([zramOpts, curZram] {
+				if (zramOpts->getSelected() != curZram) {
+					SystemConf::getInstance()->set("memory.zram_size", zramOpts->getSelected());
+					Utils::Platform::runSystemCommand("rocknix-memory-manager --zram-size " + zramOpts->getSelected() + " --reload", "", nullptr);
+				}
 			});
 
 			// ZRAM algorithm
@@ -2093,9 +2095,11 @@ void GuiMenu::openSystemSettings()
 			algoOpts->add("zstd", "zstd", curAlgo == "zstd");
 			algoOpts->add("lzo-rle", "lzo-rle", curAlgo == "lzo-rle");
 			mm->addWithLabel(_("ZRAM ALGORITHM"), algoOpts);
-			mm->addSaveFunc([algoOpts] {
-				SystemConf::getInstance()->set("memory.zram_algo", algoOpts->getSelected());
-				Utils::Platform::runSystemCommand("rocknix-memory-manager --zram-algo " + algoOpts->getSelected() + " --reload", "", nullptr);
+			mm->addSaveFunc([algoOpts, curAlgo] {
+				if (algoOpts->getSelected() != curAlgo) {
+					SystemConf::getInstance()->set("memory.zram_algo", algoOpts->getSelected());
+					Utils::Platform::runSystemCommand("rocknix-memory-manager --zram-algo " + algoOpts->getSelected() + " --reload", "", nullptr);
+				}
 			});
 
 			// KSM toggle
@@ -2106,9 +2110,11 @@ void GuiMenu::openSystemSettings()
 			ksmOpts->add(_("ON"), "enable", curKsm == "enable");
 			ksmOpts->add(_("OFF"), "disable", curKsm == "disable");
 			mm->addWithLabel(_("KERNEL SAMEPAGE MERGING"), ksmOpts);
-			mm->addSaveFunc([ksmOpts] {
-				SystemConf::getInstance()->set("memory.ksm", ksmOpts->getSelected());
-				Utils::Platform::runSystemCommand("rocknix-memory-manager --ksm " + ksmOpts->getSelected() + " --reload", "", nullptr);
+			mm->addSaveFunc([ksmOpts, curKsm] {
+				if (ksmOpts->getSelected() != curKsm) {
+					SystemConf::getInstance()->set("memory.ksm", ksmOpts->getSelected());
+					Utils::Platform::runSystemCommand("rocknix-memory-manager --ksm " + ksmOpts->getSelected() + " --reload", "", nullptr);
+				}
 			});
 
 			window->pushGui(mm);
@@ -5245,10 +5251,12 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 
 		// Global Nullify Mode toggle
 		auto nullifySwitch = std::make_shared<SwitchComponent>(mWindow);
-		nullifySwitch->setState(sysStatus.globalNullify);
+		bool initialNullify = sysStatus.globalNullify;
+		nullifySwitch->setState(initialNullify);
 		s->addWithLabel(_("NULLIFY MODE"), nullifySwitch);
-		s->addSaveFunc([nullifySwitch] {
-			RxnmNetwork::setGlobalNullify(nullifySwitch->getState());
+		s->addSaveFunc([nullifySwitch, initialNullify] {
+			if (nullifySwitch->getState() != initialNullify)
+				RxnmNetwork::setGlobalNullify(nullifySwitch->getState());
 		});
 	} else {
 #endif

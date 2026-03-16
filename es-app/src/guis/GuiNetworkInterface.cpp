@@ -64,11 +64,13 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 	addGroup(_("POWER MANAGEMENT"));
 
 	auto nullifySwitch = std::make_shared<SwitchComponent>(window);
-	nullifySwitch->setState(info.isNullified);
+	bool initialNullify = info.isNullified;
+	nullifySwitch->setState(initialNullify);
 	addWithLabel(_("NULLIFY MODE"), nullifySwitch);
 	std::string ifName = ifaceName;
-	addSaveFunc([nullifySwitch, ifName] {
-		RxnmNetwork::setInterfaceNullify(ifName, nullifySwitch->getState());
+	addSaveFunc([nullifySwitch, ifName, initialNullify] {
+		if (nullifySwitch->getState() != initialNullify)
+			RxnmNetwork::setInterfaceNullify(ifName, nullifySwitch->getState());
 	});
 }
 
