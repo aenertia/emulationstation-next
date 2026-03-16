@@ -231,6 +231,35 @@ std::vector<RxnmNetwork::WifiNetwork> RxnmNetwork::scanNetworks(const std::strin
     return networks;
 }
 
+std::vector<RxnmNetwork::BluetoothDevice> RxnmNetwork::listBluetoothDevices()
+{
+    std::vector<BluetoothDevice> devices;
+    std::string json = popen_read("rxnm bluetooth list --format json 2>/dev/null");
+    if (json.empty()) return devices;
+
+    rapidjson::Document doc;
+    doc.Parse(json.c_str());
+    if (doc.HasParseError() || !doc.IsObject()) return devices;
+    if (!doc.HasMember("devices") || !doc["devices"].IsArray()) return devices;
+
+    for (auto& item : doc["devices"].GetArray()) {
+        if (!item.IsObject()) continue;
+        BluetoothDevice dev;
+        if (item.HasMember("mac") && item["mac"].IsString())
+            dev.mac = item["mac"].GetString();
+        if (item.HasMember("name") && item["name"].IsString())
+            dev.name = item["name"].GetString();
+        if (item.HasMember("connected") && item["connected"].IsBool())
+            dev.connected = item["connected"].GetBool();
+        if (item.HasMember("paired") && item["paired"].IsBool())
+            dev.paired = item["paired"].GetBool();
+        if (!dev.mac.empty())
+            devices.push_back(dev);
+    }
+
+    return devices;
+}
+
 std::string RxnmNetwork::getIpAddress()
 {
     SystemStatus status = getSystemStatus();

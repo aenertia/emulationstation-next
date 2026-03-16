@@ -50,10 +50,18 @@ public:
         bool known = false;
     };
 
+    struct BluetoothDevice {
+        std::string mac;
+        std::string name;
+        bool connected = false;
+        bool paired = false;
+    };
+
     // Status (read-only)
     static SystemStatus getSystemStatus();
     static std::future<SystemStatus> getSystemStatusAsync();
     static std::vector<WifiNetwork> scanNetworks(const std::string& iface = "");
+    static std::vector<BluetoothDevice> listBluetoothDevices();
 
     // Generic mutator — calls "rxnm <args> --format json", returns exit code == 0
     static bool exec(const std::string& args);
