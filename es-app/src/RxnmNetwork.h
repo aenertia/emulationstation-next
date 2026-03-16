@@ -49,7 +49,12 @@ public:
     static SystemStatus getSystemStatus();
     static std::future<SystemStatus> getSystemStatusAsync();
 
-    // WiFi operations
+    // WiFi operations — full lifecycle
+    static bool enableWifi(const std::string& ssid, const std::string& password,
+                           const std::string& country = "");
+    static bool disableWifi();
+
+    // WiFi operations — individual
     static std::vector<WifiNetwork> scanNetworks(const std::string& iface = "");
     static std::vector<WifiNetwork> listNetworks(const std::string& iface = "");
     static bool connectWifi(const std::string& ssid, const std::string& password, bool hidden = false);

@@ -442,7 +442,7 @@ bool ApiSystem::enableWifi(std::string ssid, std::string key, std::string countr
 {
 #ifdef ROCKNIX
 	if (RxnmNetwork::isAvailable())
-		return RxnmNetwork::connectWifi(ssid, key);
+		return RxnmNetwork::enableWifi(ssid, key, country);
 #endif
 	bool ret;
 
@@ -470,7 +470,7 @@ bool ApiSystem::disableWifi()
 {
 #ifdef ROCKNIX
 	if (RxnmNetwork::isAvailable())
-		return RxnmNetwork::disconnectWifi();
+		return RxnmNetwork::disableWifi();
 #endif
 	return executeScript("wifictl disable");
 }

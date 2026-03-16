@@ -194,6 +194,27 @@ std::vector<RxnmNetwork::WifiNetwork> RxnmNetwork::listNetworks(const std::strin
     return networks;
 }
 
+bool RxnmNetwork::enableWifi(const std::string& ssid, const std::string& password,
+                             const std::string& country)
+{
+    // 1. Unblock WiFi radio (same as wifictl enable)
+    system("rfkill unblock wifi");
+
+    // 2. Set regulatory country code if provided
+    if (!country.empty())
+        execRxnm("wifi country " + country);
+
+    // 3. Connect to network
+    return connectWifi(ssid, password);
+}
+
+bool RxnmNetwork::disableWifi()
+{
+    disconnectWifi();
+    system("rfkill block wifi");
+    return true;
+}
+
 bool RxnmNetwork::connectWifi(const std::string& ssid, const std::string& password, bool hidden)
 {
     std::string cmd = "wifi connect --ssid \"" + ssid + "\"";
