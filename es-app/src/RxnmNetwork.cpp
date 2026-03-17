@@ -70,6 +70,8 @@ RxnmNetwork::SystemStatus RxnmNetwork::getSystemStatus()
 
     if (doc.HasMember("hostname") && doc["hostname"].IsString())
         status.hostname = doc["hostname"].GetString();
+    if (doc.HasMember("domain") && doc["domain"].IsString())
+        status.domain = doc["domain"].GetString();
 
     if (doc.HasMember("interfaces") && doc["interfaces"].IsObject()) {
         for (auto it = doc["interfaces"].MemberBegin(); it != doc["interfaces"].MemberEnd(); ++it) {

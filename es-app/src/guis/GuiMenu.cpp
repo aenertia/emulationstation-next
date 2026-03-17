@@ -5212,22 +5212,10 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 			return (pos != std::string::npos) ? addr.substr(0, pos) : addr;
 		};
 
-		// Build HOSTNAME.DOMAIN — use resolved search domain or .local for gadget-only
+		// Build HOSTNAME.DOMAIN from rxnm status
 		std::string fqdn = sysStatus.hostname.empty() ? "ROCKNIX" : sysStatus.hostname;
 		{
-			std::string domain;
-			// Try DHCP-acquired domain from resolvectl
-			FILE* p = popen("resolvectl domain 2>/dev/null | awk '/link/{print $NF}' | grep -v '^$' | head -1", "r");
-			if (p) {
-				char buf[256] = {};
-				if (fgets(buf, sizeof(buf), p)) {
-					domain = buf;
-					while (!domain.empty() && (domain.back() == '\n' || domain.back() == '\r'))
-						domain.pop_back();
-				}
-				pclose(p);
-			}
-			// Fallback: .local for mDNS/gadget-only connections
+			std::string domain = sysStatus.domain;
 			if (domain.empty())
 				domain = "local";
 			fqdn += "." + domain;

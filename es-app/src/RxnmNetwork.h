@@ -37,6 +37,7 @@ public:
 
     struct SystemStatus {
         std::string hostname;
+        std::string domain;
         bool isOnline = false;
         bool globalNullify = false;
         std::map<std::string, InterfaceInfo> interfaces;
