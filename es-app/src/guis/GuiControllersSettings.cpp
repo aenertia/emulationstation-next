@@ -11,6 +11,9 @@
 
 #include "guis/GuiMsgBox.h"
 #include "GuiLoading.h"
+#ifdef ROCKNIX
+#include "RxnmNetwork.h"
+#endif
 #include "InputManager.h"
 #include "SystemConf.h"
 
@@ -186,6 +189,25 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 #endif
 		// FORGET BLUETOOTH CONTROLLERS OR BT AUDIO DEVICES
 		addEntry(_("BLUETOOTH DEVICE LIST"), false, [window] { window->pushGui(new GuiBluetoothDevices(window)); });
+
+#ifdef ROCKNIX
+		if (RxnmNetwork::isAvailable()) {
+			addEntry(_("BLUETOOTH TETHERING"), true, [window] {
+				auto s2 = new GuiSettings(window, _("BLUETOOTH TETHERING"));
+				s2->addEntry(_("ENABLE PAN CLIENT"), false, [window] {
+					window->pushGui(new GuiLoading<bool>(window, _("ENABLING BT TETHERING..."),
+						[](auto gui) { return RxnmNetwork::exec("bluetooth pan enable --mode client"); },
+						[window](bool ok) { window->pushGui(new GuiMsgBox(window, ok ? _("BT TETHERING ENABLED") : _("FAILED"))); }));
+				});
+				s2->addEntry(_("DISABLE PAN"), false, [window] {
+					window->pushGui(new GuiLoading<bool>(window, _("DISABLING..."),
+						[](auto gui) { return RxnmNetwork::exec("bluetooth pan disable"); },
+						[window](bool ok) { window->pushGui(new GuiMsgBox(window, _("BT TETHERING DISABLED"))); }));
+				});
+				window->pushGui(s2);
+			});
+		}
+#endif
 
 #if defined(BATOCERA) || defined(ROCKNIX)
 		}
