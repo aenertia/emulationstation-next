@@ -2891,6 +2891,47 @@ void GuiMenu::openSystemOptionsConfiguration(Window* mWindow, std::string config
 	GuiSettings* guiSystemOptions = new GuiSettings(mWindow, _("SYSTEM OPTIONS").c_str());
 	bool cfound = false;
 
+	// Performance tier — primary performance control (uclamp)
+	if (Utils::FileSystem::exists("/proc/sys/kernel/sched_util_clamp_min")) {
+		guiSystemOptions->addGroup(_("PERFORMANCE"));
+
+		auto uclampTier = std::make_shared<OptionListComponent<std::string>>(mWindow, _("PERFORMANCE TIER"), false);
+		std::string selectedTier = SystemConf::getInstance()->get(configName + ".uclamp_tier");
+		if (selectedTier.empty())
+			selectedTier = "default";
+
+		uclampTier->add(_("DEFAULT (Auto)"), "default", selectedTier == "default");
+		uclampTier->add(_("Light (Retro)"), "light", selectedTier == "light");
+		uclampTier->add(_("Medium (PS1/N64)"), "medium", selectedTier == "medium");
+		uclampTier->add(_("Heavy (PSP/GC)"), "heavy", selectedTier == "heavy");
+		uclampTier->add(_("Very Heavy (3DS/PS2)"), "very_heavy", selectedTier == "very_heavy");
+		uclampTier->add(_("Maximum"), "maximum", selectedTier == "maximum");
+		uclampTier->add(_("Manual"), "manual", selectedTier == "manual");
+
+		guiSystemOptions->addWithLabel(_("PERFORMANCE TIER"), uclampTier);
+		guiSystemOptions->addSaveFunc([uclampTier, configName] {
+			SystemConf::getInstance()->set(configName + ".uclamp_tier", uclampTier->getSelected());
+		});
+
+		// Manual slider — fine-grained uclamp_min (0-1024), step 64
+		auto uclampSlider = std::make_shared<SliderComponent>(mWindow, 0.f, 1024.f, 64.f, "");
+		std::string uclampMinStr = SystemConf::getInstance()->get(configName + ".uclamp_min");
+		if (!uclampMinStr.empty()) {
+			try { uclampSlider->setValue(std::stof(uclampMinStr)); }
+			catch (...) { uclampSlider->setValue(512.f); }
+		} else {
+			uclampSlider->setValue(512.f);
+		}
+
+		guiSystemOptions->addWithLabel(_("PERFORMANCE LEVEL (MANUAL)"), uclampSlider);
+		guiSystemOptions->addSaveFunc([uclampSlider, configName] {
+			SystemConf::getInstance()->set(configName + ".uclamp_min",
+				std::to_string((int)Math::round(uclampSlider->getValue())));
+		});
+
+		guiSystemOptions->addGroup(_("HARDWARE"));
+	}
+
 #if defined(S922X) || defined(RK3588) || defined(RK3399) || defined(SM8250) || defined(SM8550)
 	// Core chooser
 	auto cores_used = std::make_shared<OptionListComponent<std::string>>(mWindow, _("CORES USED"));
