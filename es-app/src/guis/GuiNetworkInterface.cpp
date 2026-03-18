@@ -228,6 +228,16 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 			RxnmNetwork::exec(std::string("system nullify ") + (nullifySwitch->getState() ? "enable" : "disable") + " --interface " + ifName);
 	});
 
+	// Software Wake-on-LAN — enables remote wake via magic packets
+	auto wolSwitch = std::make_shared<SwitchComponent>(window);
+	std::string wolSetting = SystemConf::getInstance()->get("network." + ifName + ".soft_wol");
+	wolSwitch->setState(wolSetting == "1");
+	addWithLabel(_("SOFTWARE WAKE-ON-LAN"), wolSwitch);
+	addSaveFunc([wolSwitch, ifName] {
+		std::string val = wolSwitch->getState() ? "1" : "0";
+		SystemConf::getInstance()->set("network." + ifName + ".soft_wol", val);
+	});
+
 	addGroup(_("PROFILES"));
 
 	addEntry(_("SAVE PROFILE"), false, [window] {

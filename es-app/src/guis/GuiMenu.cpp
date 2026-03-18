@@ -2125,21 +2125,18 @@ void GuiMenu::openSystemSettings()
 #if defined(AMD64) || defined(RK3326) || defined(RK3566) || defined(RK3588) || defined(RK3399) || defined(SM8250)
 	// Allow user control over how the device sleeps - only show for devices with real suspend enabled
 	s->addGroup(_("SUSPEND"));
-	auto optionsSleep = std::make_shared<OptionListComponent<std::string> >(mWindow, _("DEVICE SUSPEND MODE"), false);
-	std::vector<std::string> availableSleepModes = ApiSystem::getInstance()->getSleepModes();
+	auto optionsSleep = std::make_shared<OptionListComponent<std::string> >(mWindow, _("SUSPEND TYPE"), false);
 	std::string selectedSleep = SystemConf::getInstance()->get("system.suspendmode");
 	if (selectedSleep.empty())
 		selectedSleep = "default";
-	bool found = false;
-	for (auto it = availableSleepModes.begin(); it != availableSleepModes.end(); it++)
-	{
-		optionsSleep->add((*it), (*it), selectedSleep == (*it));
-		if (selectedSleep == (*it))
-			found = true;
-	}
-	if (!found)
-		optionsSleep->add(selectedSleep, selectedSleep, true);
-	s->addWithLabel(_("DEVICE SUSPEND MODE"), optionsSleep);
+
+	optionsSleep->add(_("DEFAULT"), "default", selectedSleep == "default");
+	optionsSleep->add(_("DEEP SLEEP (S2R)"), "mem", selectedSleep == "mem");
+	optionsSleep->add(_("SHALLOW SLEEP"), "standby", selectedSleep == "standby");
+	optionsSleep->add(_("IDLE FREEZE (S2I)"), "freeze", selectedSleep == "freeze");
+	optionsSleep->add(_("DISABLED"), "off", selectedSleep == "off");
+
+	s->addWithLabel(_("SUSPEND TYPE"), optionsSleep);
 	s->addSaveFunc([this, optionsSleep, selectedSleep]
 	{
 		if (optionsSleep->changed()) {
@@ -2147,6 +2144,22 @@ void GuiMenu::openSystemSettings()
 			Utils::Platform::runSystemCommand("/usr/bin/suspendmode " + optionsSleep->getSelected(), "", nullptr);
 		}
 	});
+
+	// Nullify on sleep — keep radios alive but silent for instant resume
+	if (RxnmNetwork::isAvailable()) {
+		auto nullifySleep = std::make_shared<SwitchComponent>(mWindow);
+		bool nullifyEnabled = SystemConf::getInstance()->get("system.nullify_on_sleep") != "0";
+		nullifySleep->setState(nullifyEnabled);
+		s->addWithLabel(_("KEEP NETWORK ALIVE (NULLIFY)"), nullifySleep);
+		s->addSaveFunc([nullifySleep] {
+			std::string val = nullifySleep->getState() ? "1" : "0";
+			SystemConf::getInstance()->set("system.nullify_on_sleep", val);
+			Utils::Platform::runSystemCommand(
+				"mkdir -p /storage/.config/network && echo 'NULLIFY_ON_SLEEP="
+				+ std::string(nullifySleep->getState() ? "true" : "false")
+				+ "' > /storage/.config/network/nullify.conf", "", nullptr);
+		});
+	}
 #else
 	// Allow user control over a timed shutdown after fake suspend
 	s->addGroup(_("SUSPEND"));
