@@ -731,6 +731,18 @@ int main(int argc, char* argv[])
 						  ApiSystem::getInstance()->launchControlcenter();
 						  eventTaken = true;
 						}
+
+					      // Display cycle hotkeys (guide + shoulder)
+					      if (config->isMappedTo("pageup", input))
+						{
+						  Utils::Platform::runSystemCommand("display-cycle move", "", nullptr);
+						  eventTaken = true;
+						}
+					      else if (config->isMappedTo("pagedown", input))
+						{
+						  Utils::Platform::runSystemCommand("display-cycle off", "", nullptr);
+						  eventTaken = true;
+						}
 					    }
 					}
 				    }
