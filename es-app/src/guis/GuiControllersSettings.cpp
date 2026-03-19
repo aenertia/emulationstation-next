@@ -18,6 +18,7 @@
 #include "SystemConf.h"
 
 #include "utils/Platform.h"
+#include "utils/FileSystemUtil.h"
 
 #define gettext_controllers_settings				_("CONTROLLER SETTINGS")
 #define gettext_controllers_and_bluetooth_settings  _("CONTROLLER & BLUETOOTH SETTINGS")
@@ -238,6 +239,81 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 
 	addSwitch(_("SHOW GUN NOTIFICATIONS"), "ShowGunsNotifications", true);	
 	addSwitch(_("DRAW GUN CROSSHAIR"), "DrawGunCrosshair", true);
+
+#ifdef ROCKNIX
+	// CONTROLLER OUTPUT — expose device as gamepad to external hosts
+	if (Utils::FileSystem::exists("/usr/bin/gadget-controller") ||
+	    Utils::FileSystem::exists("/usr/bin/bt-controller"))
+	{
+		addGroup(_("CONTROLLER OUTPUT"));
+
+		// Output Mode
+		auto outputMode = std::make_shared<OptionListComponent<std::string>>(mWindow, _("OUTPUT MODE"), false);
+		outputMode->add(_("DISABLED"), "disabled", SystemConf::getInstance()->get("system.controller_output.mode") != "usb" && SystemConf::getInstance()->get("system.controller_output.mode") != "bluetooth");
+		if (Utils::FileSystem::exists("/usr/bin/gadget-controller"))
+			outputMode->add(_("USB GADGET"), "usb", SystemConf::getInstance()->get("system.controller_output.mode") == "usb");
+		if (Utils::FileSystem::exists("/usr/bin/bt-controller"))
+			outputMode->add(_("BLUETOOTH"), "bluetooth", SystemConf::getInstance()->get("system.controller_output.mode") == "bluetooth");
+		addWithLabel(_("OUTPUT MODE"), outputMode);
+		addSaveFunc([outputMode] {
+			std::string mode = outputMode->getSelected();
+			std::string prev = SystemConf::getInstance()->get("system.controller_output.mode");
+			if (mode != prev) {
+				SystemConf::getInstance()->set("system.controller_output.mode", mode);
+				if (prev == "usb")
+					Utils::Platform::runSystemCommand("gadget-controller disable 2>/dev/null", "", nullptr);
+				if (prev == "bluetooth")
+					Utils::Platform::runSystemCommand("bt-controller disconnect 2>/dev/null", "", nullptr);
+				if (mode == "usb")
+					Utils::Platform::runSystemCommand("gadget-controller enable 2>/dev/null", "", nullptr);
+				if (mode == "bluetooth")
+					Utils::Platform::runSystemCommand("bt-controller connect 2>/dev/null", "", nullptr);
+			}
+		});
+
+		// Output Type
+		auto outputType = std::make_shared<OptionListComponent<std::string>>(mWindow, _("CONTROLLER TYPE"), false);
+		std::string curType = SystemConf::getInstance()->get("system.controller_output.type");
+		if (curType.empty()) curType = "xbox";
+		outputType->add(_("XBOX SERIES"), "xbox", curType == "xbox");
+		outputType->add(_("DUALSENSE"), "ds5", curType == "ds5");
+		outputType->add(_("SWITCH PRO"), "switch", curType == "switch");
+		outputType->add(_("GENERIC HID"), "generic", curType == "generic");
+		addWithLabel(_("CONTROLLER TYPE"), outputType);
+		addSaveFunc([outputType] {
+			std::string type = outputType->getSelected();
+			SystemConf::getInstance()->set("system.controller_output.type", type);
+			Utils::Platform::runSystemCommand("gadget-controller set-type " + type + " 2>/dev/null", "", nullptr);
+		});
+	}
+
+	// INPUTPLUMBER TARGET — change what internal controller appears as
+	if (Utils::FileSystem::exists("/usr/bin/inputplumber"))
+	{
+		addGroup(_("INTERNAL CONTROLLER"));
+
+		auto ipTarget = std::make_shared<OptionListComponent<std::string>>(mWindow, _("CONTROLLER MODE"), false);
+		std::string curTarget = SystemConf::getInstance()->get("system.inputplumber.target");
+		if (curTarget.empty()) curTarget = "xbox-series";
+		ipTarget->add(_("XBOX SERIES"), "xbox-series", curTarget == "xbox-series");
+		ipTarget->add(_("DUALSENSE"), "ds5", curTarget == "ds5");
+		ipTarget->add(_("STEAM DECK"), "deck", curTarget == "deck");
+		ipTarget->add(_("GENERIC GAMEPAD"), "gamepad", curTarget == "gamepad");
+		addWithLabel(_("CONTROLLER MODE"), ipTarget);
+		addSaveFunc([ipTarget] {
+			std::string target = ipTarget->getSelected();
+			std::string prev = SystemConf::getInstance()->get("system.inputplumber.target");
+			if (target != prev) {
+				SystemConf::getInstance()->set("system.inputplumber.target", target);
+				// Switch InputPlumber target via DBus
+				Utils::Platform::runSystemCommand(
+					"for dev in $(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep CompositeDevice); do "
+					"busctl call org.shadowblip.InputPlumber \"$dev\" "
+					"org.shadowblip.Input.CompositeDevice SetTargetDevices as 1 \"" + target + "\" 2>/dev/null; done", "", nullptr);
+			}
+		});
+	}
+#endif
 
 #ifdef BATOCERA
 	addGroup(_("BEHAVIOR"));
