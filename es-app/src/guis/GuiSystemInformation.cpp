@@ -113,6 +113,14 @@ GuiSystemInformation::GuiSystemInformation(Window* window) : GuiSettings(window,
 	}
 #endif
 
+	// Active storage profile
+	if (Utils::FileSystem::exists("/usr/bin/profile-manager")) {
+		std::string profileName = Utils::Platform::GetShOutput(R"(/usr/bin/profile-manager)");
+		if (profileName.empty()) profileName = "Default";
+		addWithLabel(_("STORAGE PROFILE"),
+			std::make_shared<TextComponent>(window, profileName, font, color));
+	}
+
 	addGroup(_("VIDEO DRIVER"));
 	for (auto info : Renderer::getDriverInformation())
 		addWithLabel(_(info.first.c_str()), std::make_shared<TextComponent>(window, info.second, font, color));

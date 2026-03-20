@@ -1903,6 +1903,56 @@ void GuiMenu::openSystemSettings()
 		});
 	}
 
+	// Storage Profile selection
+	if (Utils::FileSystem::exists("/usr/bin/profile-manager")) {
+		s->addGroup(_("STORAGE PROFILE"));
+
+		auto optionsProfile = std::make_shared<OptionListComponent<std::string>>(
+			mWindow, _("STORAGE PROFILE"), false);
+		std::string selectedProfile = Utils::Platform::GetShOutput(
+			R"(/usr/bin/profile-manager)");
+		if (selectedProfile.empty()) selectedProfile = "Default";
+
+		std::string profileList = Utils::Platform::GetShOutput(
+			R"(/usr/bin/profile-manager --list)");
+		std::stringstream pss(profileList);
+		std::string pname;
+		while (pss >> pname)
+			optionsProfile->add(pname, pname, pname == selectedProfile);
+
+		s->addWithLabel(_("ACTIVE PROFILE"), optionsProfile);
+		s->addSaveFunc([this, optionsProfile, selectedProfile, s] {
+			if (optionsProfile->changed()) {
+				mWindow->pushGui(new GuiMsgBox(mWindow,
+					_("CHANGING PROFILE REQUIRES A REBOOT. CONTINUE?"),
+					_("YES"), [this, optionsProfile, s] {
+						Utils::Platform::runSystemCommand(
+							"/usr/bin/profile-manager set " +
+							optionsProfile->getSelected(), "", nullptr);
+						s->setVariable("reboot", true);
+					},
+					_("NO"), nullptr));
+			}
+		});
+
+		if (selectedProfile != "Default" &&
+			Utils::FileSystem::exists("/run/storage")) {
+			s->addEntry(_("USE UPDATE DEFAULTS"), false, [this] {
+				mWindow->pushGui(new GuiMsgBox(mWindow,
+					_("COPY DEFAULT SETTINGS INTO THE ACTIVE PROFILE? "
+					  "EXISTING PROFILE SETTINGS WILL BE OVERWRITTEN."),
+					_("YES"), [this] {
+						Utils::Platform::runSystemCommand(
+							"/usr/bin/profile-manager apply-defaults",
+							"", nullptr);
+						mWindow->pushGui(new GuiMsgBox(mWindow,
+							_("DEFAULTS APPLIED."), _("OK"), nullptr));
+					},
+					_("NO"), nullptr));
+			});
+		}
+	}
+
 	s->addGroup(_("PERFORMANCE"));
 	if (Utils::Platform::GetEnv("DEVICE_HAS_FAN") == "true") {
 		// Provides cooling profile switching
