@@ -23,11 +23,7 @@ GuiWifi::GuiWifi(Window* window, const std::string title, std::string data, cons
 
 	addChild(&mMenu);
 
-	std::vector<std::string> ssids = ApiSystem::getInstance()->getWifiNetworks();
-	if (ssids.empty())
-		mWindow->postToUiThread([this]() { onRefresh(); });		
-	else
-		load(ssids);
+	mWindow->postToUiThread([this]() { onRefresh(); });
 
 	mMenu.addButton(_("REFRESH"), "refresh", [&] { onRefresh(); });
 	mMenu.addButton(_("CONNECT HIDDEN"), "manual input", [&] { onManualInput(); });
