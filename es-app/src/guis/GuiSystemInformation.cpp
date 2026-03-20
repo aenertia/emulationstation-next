@@ -4,6 +4,8 @@
 #include "ThemeData.h"
 #include "ApiSystem.h"
 #include "views/UIModeController.h"
+#include "utils/Platform.h"
+#include "utils/FileSystemUtil.h"
 #include <cstdio>
 #include <fstream>
 #include <sstream>
