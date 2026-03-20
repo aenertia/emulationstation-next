@@ -6,6 +6,7 @@
 #include "views/UIModeController.h"
 #include "utils/Platform.h"
 #include "utils/FileSystemUtil.h"
+#include "utils/StringUtil.h"
 #include <cstdio>
 #include <fstream>
 #include <sstream>
@@ -117,7 +118,8 @@ GuiSystemInformation::GuiSystemInformation(Window* window) : GuiSettings(window,
 
 	// Active storage profile
 	if (Utils::FileSystem::exists("/usr/bin/profile-manager")) {
-		std::string profileName = Utils::Platform::GetShOutput(R"(/usr/bin/profile-manager)");
+		std::string profileName = Utils::String::trim(
+			Utils::Platform::GetShOutput(R"(/usr/bin/profile-manager)"));
 		if (profileName.empty()) profileName = "Default";
 		addWithLabel(_("STORAGE PROFILE"),
 			std::make_shared<TextComponent>(window, profileName, font, color));

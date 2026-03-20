@@ -1909,12 +1909,12 @@ void GuiMenu::openSystemSettings()
 
 		auto optionsProfile = std::make_shared<OptionListComponent<std::string>>(
 			mWindow, _("STORAGE PROFILE"), false);
-		std::string selectedProfile = Utils::Platform::GetShOutput(
-			R"(/usr/bin/profile-manager)");
+		std::string selectedProfile = Utils::String::trim(
+			Utils::Platform::GetShOutput(R"(/usr/bin/profile-manager)"));
 		if (selectedProfile.empty()) selectedProfile = "Default";
 
-		std::string profileList = Utils::Platform::GetShOutput(
-			R"(/usr/bin/profile-manager --list)");
+		std::string profileList = Utils::String::trim(
+			Utils::Platform::GetShOutput(R"(/usr/bin/profile-manager --list)"));
 		std::stringstream pss(profileList);
 		std::string pname;
 		while (pss >> pname)
@@ -1933,6 +1933,31 @@ void GuiMenu::openSystemSettings()
 					},
 					_("NO"), nullptr));
 			}
+		});
+
+		// Create new profile with on-screen keyboard
+		s->addEntry(_("CREATE NEW PROFILE"), false, [this, s] {
+			auto updateVal = [this, s](const std::string& newName) {
+				if (newName.empty()) return;
+				Utils::Platform::runSystemCommand(
+					"/usr/bin/profile-manager create \"" + newName + "\"",
+					"", nullptr);
+				mWindow->pushGui(new GuiMsgBox(mWindow,
+					_("PROFILE CREATED. SWITCH TO IT NOW?"),
+					_("YES"), [this, newName, s] {
+						Utils::Platform::runSystemCommand(
+							"/usr/bin/profile-manager set \"" + newName + "\"",
+							"", nullptr);
+						s->setVariable("reboot", true);
+					},
+					_("NO"), nullptr));
+			};
+			if (Settings::getInstance()->getBool("UseOSK"))
+				mWindow->pushGui(new GuiTextEditPopupKeyboard(
+					mWindow, _("PROFILE NAME"), "", updateVal, false));
+			else
+				mWindow->pushGui(new GuiTextEditPopup(
+					mWindow, _("PROFILE NAME"), "", updateVal, false));
 		});
 
 		if (selectedProfile != "Default" &&
