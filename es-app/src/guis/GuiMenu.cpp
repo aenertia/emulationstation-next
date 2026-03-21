@@ -5383,42 +5383,6 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 			});
 		}
 
-		// VPN: Add entry for creating new WireGuard tunnels
-		s->addGroup(_("VPN"));
-		s->addEntry(_("WIREGUARD"), true, [window] {
-			auto s2 = new GuiSettings(window, _("WIREGUARD VPN"));
-			s2->addInputTextConfigRow(_("TUNNEL NAME"), "vpn.wg.name", false);
-			s2->addInputTextConfigRow(_("PRIVATE KEY"), "vpn.wg.private_key", true);
-			s2->addInputTextConfigRow(_("PEER PUBLIC KEY"), "vpn.wg.peer_key", false);
-			s2->addInputTextConfigRow(_("ENDPOINT"), "vpn.wg.endpoint", false);
-			s2->addInputTextConfigRow(_("ALLOWED IPS"), "vpn.wg.allowed_ips", false);
-			s2->addInputTextConfigRow(_("ADDRESS"), "vpn.wg.address", false);
-
-			s2->addEntry(_("CONNECT"), false, [window] {
-				std::string n = SystemConf::getInstance()->get("vpn.wg.name");
-				if (n.empty()) { window->pushGui(new GuiMsgBox(window, _("PLEASE SET A TUNNEL NAME"))); return; }
-				std::string cmd = "vpn wireguard connect \"" + n + "\"";
-				std::string k;
-				k = SystemConf::getInstance()->get("vpn.wg.private_key"); if (!k.empty()) cmd += " --private-key \"" + k + "\"";
-				k = SystemConf::getInstance()->get("vpn.wg.peer_key"); if (!k.empty()) cmd += " --peer-key \"" + k + "\"";
-				k = SystemConf::getInstance()->get("vpn.wg.endpoint"); if (!k.empty()) cmd += " --endpoint \"" + k + "\"";
-				k = SystemConf::getInstance()->get("vpn.wg.allowed_ips"); if (!k.empty()) cmd += " --allowed-ips \"" + k + "\"";
-				k = SystemConf::getInstance()->get("vpn.wg.address"); if (!k.empty()) cmd += " --address \"" + k + "\"";
-				window->pushGui(new GuiLoading<bool>(window, _("CONNECTING VPN..."),
-					[cmd](auto gui) { bool ok = RxnmNetwork::exec(cmd); RxnmNetwork::reload(); return ok; },
-					[window](bool ok) { window->pushGui(new GuiMsgBox(window, ok ? _("VPN CONNECTED") : _("VPN FAILED"))); }));
-			});
-
-			s2->addEntry(_("DISCONNECT"), false, [window] {
-				std::string n = SystemConf::getInstance()->get("vpn.wg.name");
-				if (n.empty()) return;
-				window->pushGui(new GuiLoading<bool>(window, _("DISCONNECTING..."),
-					[n](auto gui) { RxnmNetwork::exec("vpn wireguard disconnect \"" + n + "\""); return RxnmNetwork::reload(); },
-					[window](bool ok) { window->pushGui(new GuiMsgBox(window, _("VPN DISCONNECTED"))); }));
-			});
-			window->pushGui(s2);
-		});
-
 	} else {
 #endif
 	auto ip = std::make_shared<TextComponent>(mWindow, ApiSystem::getInstance()->getIpAddress(), font, color);
@@ -5798,22 +5762,28 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 
 	s->addGroup(_("VPN SERVICES"));
 
-	const std::string wireguardConfigFile = "/storage/.config/wireguard/wg0.conf";
-	if (Utils::FileSystem::exists(wireguardConfigFile)) {
-		auto wireguard = std::make_shared<SwitchComponent>(mWindow);
-		bool wgUp = SystemConf::getInstance()->get("wireguard.up") == "1";
-		wireguard->setState(wgUp);
-		s->addWithLabel(_("WIREGUARD VPN"), wireguard);
-		wireguard->setOnChangedCallback([wireguard, wireguardConfigFile] {
-			if (wireguard->getState() == false) {
-				Utils::Platform::runSystemCommand("wg-quick down " + wireguardConfigFile, "", nullptr);
-				Utils::Platform::runSystemCommand("systemctl stop connman-vpn", "", nullptr);
-			} else {
-				Utils::Platform::runSystemCommand("systemctl start connman-vpn", "", nullptr);
-				Utils::Platform::runSystemCommand("wg-quick up " + wireguardConfigFile, "", nullptr);
-			}
-			SystemConf::getInstance()->set("wireguard.up", wireguard->getState() ? "1" : "0");
-		});
+	// Scan /storage/.config/wireguard/ for WireGuard profiles
+	const std::string wgDir = "/storage/.config/wireguard";
+	if (Utils::FileSystem::isDirectory(wgDir)) {
+		auto wgFiles = Utils::FileSystem::getDirContent(wgDir);
+		for (auto& wgPath : wgFiles) {
+			if (Utils::FileSystem::getExtension(wgPath) != ".conf")
+				continue;
+			std::string profileName = Utils::FileSystem::getStem(wgPath);
+			std::string confKey = "wireguard." + profileName + ".up";
+			auto wgToggle = std::make_shared<SwitchComponent>(mWindow);
+			bool isUp = SystemConf::getInstance()->get(confKey) == "1";
+			wgToggle->setState(isUp);
+			s->addWithLabel(_("WIREGUARD") + " - " + profileName, wgToggle);
+			wgToggle->setOnChangedCallback([wgToggle, wgPath, confKey] {
+				if (wgToggle->getState()) {
+					Utils::Platform::runSystemCommand("wg-quick up " + wgPath, "", nullptr);
+				} else {
+					Utils::Platform::runSystemCommand("wg-quick down " + wgPath, "", nullptr);
+				}
+				SystemConf::getInstance()->set(confKey, wgToggle->getState() ? "1" : "0");
+			});
+		}
 	}
 
 	auto tailscale = std::make_shared<SwitchComponent>(mWindow);
