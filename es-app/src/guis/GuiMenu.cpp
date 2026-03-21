@@ -5770,18 +5770,17 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 			if (Utils::FileSystem::getExtension(wgPath) != ".conf")
 				continue;
 			std::string profileName = Utils::FileSystem::getStem(wgPath);
-			std::string confKey = "wireguard." + profileName + ".up";
+			// Detect active status from systemd-networkd config presence
+			bool isUp = Utils::FileSystem::exists("/run/systemd/network/90-" + profileName + ".netdev");
 			auto wgToggle = std::make_shared<SwitchComponent>(mWindow);
-			bool isUp = SystemConf::getInstance()->get(confKey) == "1";
 			wgToggle->setState(isUp);
 			s->addWithLabel(_("WIREGUARD") + " - " + profileName, wgToggle);
-			wgToggle->setOnChangedCallback([wgToggle, wgPath, confKey] {
+			wgToggle->setOnChangedCallback([wgToggle, wgPath, profileName] {
 				if (wgToggle->getState()) {
-					Utils::Platform::runSystemCommand("wg-quick up " + wgPath, "", nullptr);
+					RxnmNetwork::exec("wg-import \"" + wgPath + "\" " + profileName);
 				} else {
-					Utils::Platform::runSystemCommand("wg-quick down " + wgPath, "", nullptr);
+					RxnmNetwork::exec("--yes vpn wireguard disconnect " + profileName);
 				}
-				SystemConf::getInstance()->set(confKey, wgToggle->getState() ? "1" : "0");
 			});
 		}
 	}
