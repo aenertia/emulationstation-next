@@ -34,6 +34,7 @@ private:
 	void openControllersSpecificSettings_wiigun();
 	void openControllersSpecificSettings_steamdeckgun();
 	void openControllersHotkeys();
+	void openInputSenseHotkeys();
   	void openGlobalHotkeys();
   	void openKeyboardtopads();
   	void initializeGlobalHotkeys(Window* window, GuiSettings* s);

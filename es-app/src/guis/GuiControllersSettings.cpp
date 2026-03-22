@@ -20,6 +20,10 @@
 #include "utils/Platform.h"
 #include "utils/FileSystemUtil.h"
 
+#include <algorithm>
+#include <cctype>
+#include <map>
+
 #define gettext_controllers_settings				_("CONTROLLER SETTINGS")
 #define gettext_controllers_and_bluetooth_settings  _("CONTROLLER & BLUETOOTH SETTINGS")
 
@@ -241,49 +245,115 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 	addSwitch(_("DRAW GUN CROSSHAIR"), "DrawGunCrosshair", true);
 
 #ifdef ROCKNIX
-	// CONTROLLER OUTPUT — expose device as gamepad to external hosts
-	if (Utils::FileSystem::exists("/usr/bin/gadget-controller") ||
-	    Utils::FileSystem::exists("/usr/bin/bt-controller"))
+	// CONTROLLER OUTPUT — expose device as gamepad to external hosts via rxjoy or legacy bridge
+	bool hasRxjoy = Utils::FileSystem::exists("/usr/bin/rxjoy");
+	bool hasGadgetController = Utils::FileSystem::exists("/usr/bin/gadget-controller");
+	if (hasRxjoy || hasGadgetController)
 	{
 		addGroup(_("CONTROLLER OUTPUT"));
 
 		// Output Mode
 		auto outputMode = std::make_shared<OptionListComponent<std::string>>(mWindow, _("OUTPUT MODE"), false);
-		outputMode->add(_("DISABLED"), "disabled", SystemConf::getInstance()->get("system.controller_output.mode") != "usb" && SystemConf::getInstance()->get("system.controller_output.mode") != "bluetooth");
-		if (Utils::FileSystem::exists("/usr/bin/gadget-controller"))
-			outputMode->add(_("USB GADGET"), "usb", SystemConf::getInstance()->get("system.controller_output.mode") == "usb");
-		if (Utils::FileSystem::exists("/usr/bin/bt-controller"))
-			outputMode->add(_("BLUETOOTH"), "bluetooth", SystemConf::getInstance()->get("system.controller_output.mode") == "bluetooth");
+		std::string curMode = SystemConf::getInstance()->get("system.controller_output.mode");
+		outputMode->add(_("DISABLED"), "disabled", curMode != "usb" && curMode != "bluetooth");
+		outputMode->add(_("USB GADGET"), "usb", curMode == "usb");
+		if (hasRxjoy)
+			outputMode->add(_("BLUETOOTH"), "bluetooth", curMode == "bluetooth");
 		addWithLabel(_("OUTPUT MODE"), outputMode);
-		addSaveFunc([outputMode] {
-			std::string mode = outputMode->getSelected();
-			std::string prev = SystemConf::getInstance()->get("system.controller_output.mode");
-			if (mode != prev) {
-				SystemConf::getInstance()->set("system.controller_output.mode", mode);
-				if (prev == "usb")
-					Utils::Platform::runSystemCommand("gadget-controller disable 2>/dev/null", "", nullptr);
-				if (prev == "bluetooth")
-					Utils::Platform::runSystemCommand("bt-controller disconnect 2>/dev/null", "", nullptr);
-				if (mode == "usb")
-					Utils::Platform::runSystemCommand("gadget-controller enable 2>/dev/null", "", nullptr);
-				if (mode == "bluetooth")
-					Utils::Platform::runSystemCommand("bt-controller connect 2>/dev/null", "", nullptr);
-			}
-		});
 
-		// Output Type
-		auto outputType = std::make_shared<OptionListComponent<std::string>>(mWindow, _("CONTROLLER TYPE"), false);
-		std::string curType = SystemConf::getInstance()->get("system.controller_output.type");
-		if (curType.empty()) curType = "xbox";
-		outputType->add(_("XBOX SERIES"), "xbox", curType == "xbox");
-		outputType->add(_("DUALSENSE"), "ds5", curType == "ds5");
-		outputType->add(_("SWITCH PRO"), "switch", curType == "switch");
-		outputType->add(_("GENERIC HID"), "generic", curType == "generic");
-		addWithLabel(_("CONTROLLER TYPE"), outputType);
-		addSaveFunc([outputType] {
-			std::string type = outputType->getSelected();
-			SystemConf::getInstance()->set("system.controller_output.type", type);
-			Utils::Platform::runSystemCommand("gadget-controller set-type " + type + " 2>/dev/null", "", nullptr);
+		// Output Profile — rxjoy profiles or legacy type selector
+		auto outputProfile = std::make_shared<OptionListComponent<std::string>>(mWindow, _("OUTPUT PROFILE"), false);
+		std::string curProfile = SystemConf::getInstance()->get("system.controller_output.profile");
+		if (hasRxjoy)
+		{
+			if (curProfile.empty()) curProfile = "dinput";
+
+			// Console controllers
+			outputProfile->add(_("GENERIC HID (DInput)"), "dinput", curProfile == "dinput");
+			outputProfile->add(_("XBOX 360 (XInput)"), "xinput", curProfile == "xinput");
+			outputProfile->add(_("XBOX ONE"), "xb-one", curProfile == "xb-one");
+			outputProfile->add(_("XBOX ORIGINAL"), "xboxog", curProfile == "xboxog");
+			outputProfile->add(_("PLAYSTATION 3"), "ps3", curProfile == "ps3");
+			outputProfile->add(_("PLAYSTATION 4"), "ps4", curProfile == "ps4");
+			outputProfile->add(_("PLAYSTATION 5"), "ps5", curProfile == "ps5");
+			outputProfile->add(_("SWITCH PRO"), "switch", curProfile == "switch");
+			outputProfile->add(_("PS CLASSIC"), "ps-classic", curProfile == "ps-classic");
+
+			// Nintendo wireless
+			outputProfile->add(_("WIIMOTE"), "wiimote", curProfile == "wiimote");
+			outputProfile->add(_("WIIMOTE + NUNCHUK"), "wiimote-nunchuk", curProfile == "wiimote-nunchuk");
+			outputProfile->add(_("WII CLASSIC"), "wii-classic", curProfile == "wii-classic");
+			outputProfile->add(_("WII U PRO"), "wii-u-pro", curProfile == "wii-u-pro");
+
+			// Adapters
+			outputProfile->add(_("GAMECUBE ADAPTER"), "gc-adapter", curProfile == "gc-adapter");
+			outputProfile->add(_("N64"), "n64", curProfile == "n64");
+
+			// Specialty
+			outputProfile->add(_("KEYBOARD"), "keyboard", curProfile == "keyboard");
+			outputProfile->add(_("ARCADE STICK"), "arcade-stick", curProfile == "arcade-stick");
+			outputProfile->add(_("DANCE PAD"), "dance-pad", curProfile == "dance-pad");
+			outputProfile->add(_("FLIGHT STICK"), "flight-stick", curProfile == "flight-stick");
+
+			// Rhythm instruments
+			outputProfile->add(_("GH GUITAR"), "gh-guitar", curProfile == "gh-guitar");
+			outputProfile->add(_("RB GUITAR"), "rb-guitar", curProfile == "rb-guitar");
+			outputProfile->add(_("PC GUITAR"), "pc-guitar", curProfile == "pc-guitar");
+			outputProfile->add(_("GH DRUMS"), "gh-drums", curProfile == "gh-drums");
+			outputProfile->add(_("RB DRUMS"), "rb-drums", curProfile == "rb-drums");
+			outputProfile->add(_("TURNTABLE"), "turntable", curProfile == "turntable");
+		}
+		else
+		{
+			// Legacy: basic type selector
+			if (curProfile.empty()) curProfile = "xbox";
+			outputProfile->add(_("XBOX SERIES"), "xbox", curProfile == "xbox");
+			outputProfile->add(_("DUALSENSE"), "ds5", curProfile == "ds5");
+			outputProfile->add(_("SWITCH PRO"), "switch", curProfile == "switch");
+			outputProfile->add(_("GENERIC HID"), "generic", curProfile == "generic");
+		}
+		addWithLabel(_("OUTPUT PROFILE"), outputProfile);
+
+		// Controller Audio (rxjoy only)
+		std::shared_ptr<OptionListComponent<std::string>> outputAudio;
+		if (hasRxjoy)
+		{
+			outputAudio = std::make_shared<OptionListComponent<std::string>>(mWindow, _("CONTROLLER AUDIO"), false);
+			std::string curAudio = SystemConf::getInstance()->get("system.controller_output.audio");
+			if (curAudio.empty()) curAudio = "off";
+			outputAudio->add(_("OFF"), "off", curAudio == "off");
+			outputAudio->add(_("USB (UAC2)"), "usb", curAudio == "usb");
+			outputAudio->add(_("BLUETOOTH (HFP)"), "bluetooth", curAudio == "bluetooth");
+			addWithLabel(_("CONTROLLER AUDIO"), outputAudio);
+		}
+
+		addSaveFunc([outputMode, outputProfile, outputAudio, hasRxjoy] {
+			std::string mode = outputMode->getSelected();
+			std::string profile = outputProfile->getSelected();
+			std::string prevMode = SystemConf::getInstance()->get("system.controller_output.mode");
+			std::string prevProfile = SystemConf::getInstance()->get("system.controller_output.profile");
+			bool changed = (mode != prevMode) || (profile != prevProfile);
+
+			SystemConf::getInstance()->set("system.controller_output.mode", mode);
+			SystemConf::getInstance()->set("system.controller_output.profile", profile);
+
+			if (hasRxjoy && outputAudio)
+			{
+				std::string audio = outputAudio->getSelected();
+				if (audio != SystemConf::getInstance()->get("system.controller_output.audio"))
+					changed = true;
+				SystemConf::getInstance()->set("system.controller_output.audio", audio);
+			}
+
+			if (changed)
+			{
+				if (mode == "disabled")
+					Utils::Platform::runSystemCommand("/usr/bin/usbgadget disabled 2>/dev/null", "", nullptr);
+				else if (mode == "usb")
+					Utils::Platform::runSystemCommand("/usr/bin/usbgadget controller 2>/dev/null", "", nullptr);
+				else if (mode == "bluetooth" && hasRxjoy)
+					Utils::Platform::runSystemCommand("systemctl start rxjoy@" + profile + " 2>/dev/null", "", nullptr);
+			}
 		});
 	}
 
@@ -312,7 +382,70 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 					"org.shadowblip.Input.CompositeDevice SetTargetDevices as 1 \"" + target + "\" 2>/dev/null; done", "", nullptr);
 			}
 		});
+
+		// Default Profile — loaded when not running an emulator
+		// Scan system profiles + user dropins (user overrides system with same name)
+		const std::string sysProfileDir = "/usr/share/inputplumber/profiles";
+		const std::string userProfileDir = "/storage/.config/inputplumber/profiles";
+		if (Utils::FileSystem::isDirectory(sysProfileDir))
+		{
+			auto ipProfile = std::make_shared<OptionListComponent<std::string>>(mWindow, _("DEFAULT PROFILE"), false);
+			std::string curProfileName = SystemConf::getInstance()->get("system.inputplumber.default_profile");
+			if (curProfileName.empty()) curProfileName = "default";
+
+			// Collect profiles: stem → full path (user dir wins on conflict)
+			std::map<std::string, std::string> profileMap;
+			for (const auto& dir : { sysProfileDir, userProfileDir })
+			{
+				if (!Utils::FileSystem::isDirectory(dir))
+					continue;
+				for (const auto& path : Utils::FileSystem::getDirContent(dir, false, false))
+				{
+					std::string filename = Utils::FileSystem::getFileName(path);
+					if (filename.size() < 6 || filename.substr(filename.size() - 5) != ".yaml")
+						continue;
+					std::string stem = filename.substr(0, filename.size() - 5);
+					profileMap[stem] = path;  // later dir (user) overwrites earlier (system)
+				}
+			}
+
+			for (const auto& kv : profileMap)
+			{
+				std::string label = kv.first;
+				std::transform(label.begin(), label.end(), label.begin(), ::toupper);
+				std::replace(label.begin(), label.end(), '-', ' ');
+				// Mark user-supplied profiles
+				if (kv.second.find(userProfileDir) == 0)
+					label += " *";
+				ipProfile->add(label, kv.first, kv.first == curProfileName);
+			}
+
+			if (!ipProfile->hasSelection())
+				ipProfile->selectFirstItem();
+
+			addWithLabel(_("DEFAULT PROFILE"), ipProfile);
+			addSaveFunc([ipProfile, sysProfileDir, userProfileDir] {
+				std::string selected = ipProfile->getSelected();
+				std::string prev = SystemConf::getInstance()->get("system.inputplumber.default_profile");
+				if (selected != prev) {
+					SystemConf::getInstance()->set("system.inputplumber.default_profile", selected);
+					// Prefer user profile, fall back to system
+					std::string fullPath = userProfileDir + "/" + selected + ".yaml";
+					if (!Utils::FileSystem::exists(fullPath))
+						fullPath = sysProfileDir + "/" + selected + ".yaml";
+					Utils::Platform::runSystemCommand(
+						"for dev in $(busctl tree --list org.shadowblip.InputPlumber 2>/dev/null | grep CompositeDevice); do "
+						"busctl call org.shadowblip.InputPlumber \"$dev\" "
+						"org.shadowblip.Input.CompositeDevice LoadProfilePath "
+						"s \"" + fullPath + "\" 2>/dev/null; done", "", nullptr);
+				}
+			});
+		}
 	}
+
+	// GLOBAL HOTKEYS — input_sense key bindings
+	addGroup(_("SYSTEM HOTKEYS"));
+	addEntry(_("CONFIGURE HOTKEYS"), true, [this] { openInputSenseHotkeys(); });
 #endif
 
 #ifdef BATOCERA
@@ -780,6 +913,143 @@ void GuiControllersSettings::declareGlobalHotkey(Window* window, GuiSettings* s)
 					window->pushGui(new GuiMsgBox(window, _("MORE THAN ONE GLOBAL HOTKEY DETECTED")));				
 			}
 		}));
+}
+
+void GuiControllersSettings::openInputSenseHotkeys()
+{
+	auto s = new GuiSettings(mWindow, _("SYSTEM HOTKEYS"));
+
+	// Helper: create a button selector dropdown
+	auto makeButtonList = [this](const std::string& title, const std::string& settingKey,
+	                              const std::string& defaultVal) {
+		auto list = std::make_shared<OptionListComponent<std::string>>(mWindow, title, false);
+		std::string cur = SystemConf::getInstance()->get(settingKey);
+		if (cur.empty()) cur = defaultVal;
+
+		struct BtnDef { const char* label; const char* code; };
+		BtnDef buttons[] = {
+			{ "GUIDE",        "BTN_MODE" },
+			{ "START",        "BTN_START" },
+			{ "SELECT",       "BTN_SELECT" },
+			{ "L1",           "BTN_TL" },
+			{ "R1",           "BTN_TR" },
+			{ "L2",           "BTN_TL2" },
+			{ "R2",           "BTN_TR2" },
+			{ "L3",           "BTN_THUMBL" },
+			{ "R3",           "BTN_THUMBR" },
+			{ "SOUTH (A/X)",  "BTN_SOUTH" },
+			{ "EAST (B/O)",   "BTN_EAST" },
+			{ "NORTH (X/T)",  "BTN_NORTH" },
+			{ "WEST (Y/S)",   "BTN_WEST" },
+		};
+		for (const auto& b : buttons)
+			list->add(_(b.label), b.code, cur == b.code);
+
+		if (!list->hasSelection())
+			list->selectFirstItem();
+		return list;
+	};
+
+	// Helper: create an action selector dropdown
+	auto makeActionList = [this](const std::string& title, const std::string& settingKey,
+	                              const std::string& defaultVal) {
+		auto list = std::make_shared<OptionListComponent<std::string>>(mWindow, title, false);
+		std::string cur = SystemConf::getInstance()->get(settingKey);
+		if (cur.empty()) cur = defaultVal;
+
+		struct ActDef { const char* label; const char* code; };
+		ActDef actions[] = {
+			{ "BRIGHTNESS UP",    "brightness up" },
+			{ "BRIGHTNESS DOWN",  "brightness down" },
+			{ "VOLUME UP",        "volume up" },
+			{ "VOLUME DOWN",      "volume down" },
+			{ "LED CONTROL",      "ledcontrol" },
+			{ "LED OFF",          "ledcontrol poweroff" },
+			{ "WIFI ENABLE",      "wifictl enable" },
+			{ "WIFI DISABLE",     "wifictl disable" },
+		};
+		for (const auto& a : actions)
+			list->add(_(a.label), a.code, cur == a.code);
+
+		if (!list->hasSelection())
+			list->selectFirstItem();
+		return list;
+	};
+
+	// --- FN Modifier Keys ---
+	s->addGroup(_("MODIFIER KEYS"));
+
+	auto fnA = makeButtonList(_("FN MODIFIER (A)"), "key.function.a", "BTN_MODE");
+	s->addWithLabel(_("FN MODIFIER (A)"), fnA);
+
+	auto fnB = makeButtonList(_("FN MODIFIER (B)"), "key.function.b", "BTN_START");
+	s->addWithLabel(_("FN MODIFIER (B)"), fnB);
+
+	// --- Kill Combo ---
+	s->addGroup(_("KILL COMBO (FN + A + B + C)"));
+
+	auto killA = makeButtonList(_("KILL BUTTON A"), "key.hotkey.a", "BTN_TL");
+	s->addWithLabel(_("KILL BUTTON A"), killA);
+
+	auto killB = makeButtonList(_("KILL BUTTON B"), "key.hotkey.b", "BTN_TR");
+	s->addWithLabel(_("KILL BUTTON B"), killB);
+
+	auto killC = makeButtonList(_("KILL BUTTON C"), "key.hotkey.c", "BTN_START");
+	s->addWithLabel(_("KILL BUTTON C"), killC);
+
+	// --- FN+A Actions (Vol Up/Down with FN held) ---
+	s->addGroup(_("FN + VOLUME ACTIONS"));
+
+	auto fnAUp = makeActionList(_("FN(A) + VOL UP"), "key.function.a.up", "brightness up");
+	s->addWithLabel(_("FN(A) + VOL UP"), fnAUp);
+
+	auto fnADown = makeActionList(_("FN(A) + VOL DOWN"), "key.function.a.down", "brightness down");
+	s->addWithLabel(_("FN(A) + VOL DOWN"), fnADown);
+
+	auto fnBUp = makeActionList(_("FN(B) + VOL UP"), "key.function.b.up", "ledcontrol");
+	s->addWithLabel(_("FN(B) + VOL UP"), fnBUp);
+
+	auto fnBDown = makeActionList(_("FN(B) + VOL DOWN"), "key.function.b.down", "ledcontrol poweroff");
+	s->addWithLabel(_("FN(B) + VOL DOWN"), fnBDown);
+
+	auto fnABUp = makeActionList(_("FN(A+B) + VOL UP"), "key.function.ab.up", "wifictl enable");
+	s->addWithLabel(_("FN(A+B) + VOL UP"), fnABUp);
+
+	auto fnABDown = makeActionList(_("FN(A+B) + VOL DOWN"), "key.function.ab.down", "wifictl disable");
+	s->addWithLabel(_("FN(A+B) + VOL DOWN"), fnABDown);
+
+	// Save all settings — requires input_sense restart to take effect
+	s->addSaveFunc([fnA, fnB, killA, killB, killC, fnAUp, fnADown, fnBUp, fnBDown, fnABUp, fnABDown] {
+		bool changed = false;
+		auto sc = SystemConf::getInstance();
+
+		auto save = [&](const std::string& key, std::shared_ptr<OptionListComponent<std::string>> list) {
+			std::string val = list->getSelected();
+			if (val != sc->get(key)) {
+				sc->set(key, val);
+				changed = true;
+			}
+		};
+
+		save("key.function.a", fnA);
+		save("key.function.b", fnB);
+		save("key.hotkey.a", killA);
+		save("key.hotkey.b", killB);
+		save("key.hotkey.c", killC);
+		save("key.function.a.up", fnAUp);
+		save("key.function.a.down", fnADown);
+		save("key.function.b.up", fnBUp);
+		save("key.function.b.down", fnBDown);
+		save("key.function.ab.up", fnABUp);
+		save("key.function.ab.down", fnABDown);
+
+		if (changed) {
+			// Restart input_sense to pick up new bindings
+			Utils::Platform::runSystemCommand("systemctl restart input 2>/dev/null", "", nullptr);
+		}
+	});
+
+	mWindow->pushGui(s);
 }
 
 void GuiControllersSettings::openControllersSpecificSettings_sindengun()
