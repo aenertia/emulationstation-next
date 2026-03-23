@@ -5762,13 +5762,15 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 
 	s->addGroup(_("VPN SERVICES"));
 
-	// Scan /storage/.config/wireguard/ for WireGuard profiles
+	// Scan /storage/.config/wireguard/ for WireGuard .conf profiles
 	const std::string wgDir = "/storage/.config/wireguard";
+	bool hasWgProfiles = false;
 	if (Utils::FileSystem::isDirectory(wgDir)) {
 		auto wgFiles = Utils::FileSystem::getDirContent(wgDir);
 		for (auto& wgPath : wgFiles) {
 			if (Utils::FileSystem::getExtension(wgPath) != ".conf")
 				continue;
+			hasWgProfiles = true;
 			std::string profileName = Utils::FileSystem::getStem(wgPath);
 			// Detect active status from systemd-networkd config presence
 			bool isUp = Utils::FileSystem::exists("/run/systemd/network/90-" + profileName + ".netdev");
@@ -5783,6 +5785,15 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 				}
 			});
 		}
+	}
+	if (!hasWgProfiles) {
+		s->addEntry(_("WIREGUARD - NO PROFILES"), false, [window] {
+			window->pushGui(new GuiMsgBox(window,
+				_("Place WireGuard .conf files (wg-quick or networkd format) in:\n\n"
+				  "/storage/.config/wireguard/\n\n"
+				  "Profiles will appear here as toggles."),
+				_("OK"), nullptr, GuiMsgBoxIcon::ICON_INFORMATION));
+		});
 	}
 
 	auto tailscale = std::make_shared<SwitchComponent>(mWindow);
