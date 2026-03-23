@@ -860,12 +860,16 @@ bool ViewController::input(InputConfig* config, Input input)
 	if (mLockInput)
 		return true;
 
-	// If we receive a button pressure for a non configured joystick, suggest the joystick configuration
+	// Only suggest joystick configuration when explicitly requested from the menu.
+	// Auto-prompting on unconfigured device input causes issues with InputPlumber's
+	// virtual keyboard device (volume keys trigger unwanted configure popups).
+#if !defined(ROCKNIX)
 	if (!config->isConfigured() && (config->getDeviceId() == DEVICE_KEYBOARD || input.type == TYPE_BUTTON || input.type == TYPE_HAT))
 	{
 		mWindow->pushGui(new GuiDetectDevice(mWindow, false, NULL));
 		return true;
 	}
+#endif
 
 	if (config->getDeviceId() == DEVICE_KEYBOARD && input.value && input.id == SDLK_F5)
 	{
