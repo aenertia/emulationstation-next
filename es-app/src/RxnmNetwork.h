@@ -54,6 +54,7 @@ public:
     struct BluetoothDevice {
         std::string mac;
         std::string name;
+        std::string icon;   // BlueZ icon: "input-gaming", "audio-headphones", etc.
         bool connected = false;
         bool paired = false;
     };

@@ -53,10 +53,11 @@ bool GuiBluetoothDevices::load()
 			std::string connStr = dev.connected ? "yes" : "no";
 			std::string id = dev.mac;
 			std::string name = dev.name;
+			std::string icon = dev.icon.empty() ? "unknown" : dev.icon;
 
 			mMenu.addWithDescription(name + status, id, nullptr, [this, id, name, connStr]() {
 				mWindow->pushGui(new GuiBluetoothDeviceOptions(mWindow, id, name, connStr == "yes", [this]() { load(); }));
-			}, "unknown");
+			}, icon);
 		}
 	}
 

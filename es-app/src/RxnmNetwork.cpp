@@ -271,6 +271,8 @@ std::vector<RxnmNetwork::BluetoothDevice> RxnmNetwork::listBluetoothDevices()
             dev.mac = item["mac"].GetString();
         if (item.HasMember("name") && item["name"].IsString())
             dev.name = item["name"].GetString();
+        if (item.HasMember("icon") && item["icon"].IsString())
+            dev.icon = item["icon"].GetString();
         if (item.HasMember("connected") && item["connected"].IsBool())
             dev.connected = item["connected"].GetBool();
         if (item.HasMember("paired") && item["paired"].IsBool())
