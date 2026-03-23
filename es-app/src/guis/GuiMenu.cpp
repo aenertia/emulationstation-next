@@ -5721,8 +5721,13 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 
 	s->addSaveFunc([this, window, usbGadgetScript, optionsUSBGadget, selectedUSBGadget] {
 		if (optionsUSBGadget->changed()) {
-			Utils::Platform::runSystemCommand(usbGadgetScript + " " + optionsUSBGadget->getSelected(), "", nullptr);
-			if (optionsUSBGadget->getSelected() == "network") {
+			std::string selected = optionsUSBGadget->getSelected();
+			// Run gadget mode switch in background to avoid blocking the UI
+			// (gadget teardown can take seconds on DWC3 controllers)
+			Utils::Platform::runSystemCommand(usbGadgetScript + " " + selected + " &", "", nullptr);
+			if (selected == "network") {
+				// Give gadget time to come up before querying address
+				Utils::Platform::runSystemCommand("sleep 2", "", nullptr);
 				std::string usbip = std::string(Utils::Platform::GetShOutput(R"(/usr/bin/usbgadget address)"));
 				mWindow->pushGui(new GuiMsgBox(mWindow, _("USB Networking enabled, the device IP is ") + usbip, _("OK"), nullptr));
 			}

@@ -348,11 +348,11 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 			if (changed)
 			{
 				if (mode == "disabled")
-					Utils::Platform::runSystemCommand("/usr/bin/usbgadget disabled 2>/dev/null", "", nullptr);
+					Utils::Platform::runSystemCommand("/usr/bin/usbgadget disabled 2>/dev/null &", "", nullptr);
 				else if (mode == "usb")
-					Utils::Platform::runSystemCommand("/usr/bin/usbgadget controller 2>/dev/null", "", nullptr);
+					Utils::Platform::runSystemCommand("/usr/bin/usbgadget controller 2>/dev/null &", "", nullptr);
 				else if (mode == "bluetooth" && hasRxjoy)
-					Utils::Platform::runSystemCommand("systemctl start rxjoy@" + profile + " 2>/dev/null", "", nullptr);
+					Utils::Platform::runSystemCommand("systemctl start rxjoy@" + profile + " 2>/dev/null &", "", nullptr);
 			}
 		});
 	}
