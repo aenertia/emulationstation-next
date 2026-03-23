@@ -268,40 +268,21 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 		{
 			if (curProfile.empty()) curProfile = "dinput";
 
-			// Console controllers
+			// Configfs profiles (compatible with composite gadget)
 			outputProfile->add(_("GENERIC HID (DInput)"), "dinput", curProfile == "dinput");
-			outputProfile->add(_("XBOX 360 (XInput)"), "xinput", curProfile == "xinput");
-			outputProfile->add(_("XBOX ONE"), "xb-one", curProfile == "xb-one");
-			outputProfile->add(_("XBOX ORIGINAL"), "xboxog", curProfile == "xboxog");
 			outputProfile->add(_("PLAYSTATION 3"), "ps3", curProfile == "ps3");
 			outputProfile->add(_("PLAYSTATION 4"), "ps4", curProfile == "ps4");
 			outputProfile->add(_("PLAYSTATION 5"), "ps5", curProfile == "ps5");
 			outputProfile->add(_("SWITCH PRO"), "switch", curProfile == "switch");
 			outputProfile->add(_("PS CLASSIC"), "ps-classic", curProfile == "ps-classic");
+			outputProfile->add(_("KEYBOARD"), "keyboard", curProfile == "keyboard");
+			outputProfile->add(_("PC GUITAR"), "pc-guitar", curProfile == "pc-guitar");
 
-			// Nintendo wireless
+			// Bluetooth-only profiles (configfs compatible, BT transport)
 			outputProfile->add(_("WIIMOTE"), "wiimote", curProfile == "wiimote");
 			outputProfile->add(_("WIIMOTE + NUNCHUK"), "wiimote-nunchuk", curProfile == "wiimote-nunchuk");
 			outputProfile->add(_("WII CLASSIC"), "wii-classic", curProfile == "wii-classic");
 			outputProfile->add(_("WII U PRO"), "wii-u-pro", curProfile == "wii-u-pro");
-
-			// Adapters
-			outputProfile->add(_("GAMECUBE ADAPTER"), "gc-adapter", curProfile == "gc-adapter");
-			outputProfile->add(_("N64"), "n64", curProfile == "n64");
-
-			// Specialty
-			outputProfile->add(_("KEYBOARD"), "keyboard", curProfile == "keyboard");
-			outputProfile->add(_("ARCADE STICK"), "arcade-stick", curProfile == "arcade-stick");
-			outputProfile->add(_("DANCE PAD"), "dance-pad", curProfile == "dance-pad");
-			outputProfile->add(_("FLIGHT STICK"), "flight-stick", curProfile == "flight-stick");
-
-			// Rhythm instruments
-			outputProfile->add(_("GH GUITAR"), "gh-guitar", curProfile == "gh-guitar");
-			outputProfile->add(_("RB GUITAR"), "rb-guitar", curProfile == "rb-guitar");
-			outputProfile->add(_("PC GUITAR"), "pc-guitar", curProfile == "pc-guitar");
-			outputProfile->add(_("GH DRUMS"), "gh-drums", curProfile == "gh-drums");
-			outputProfile->add(_("RB DRUMS"), "rb-drums", curProfile == "rb-drums");
-			outputProfile->add(_("TURNTABLE"), "turntable", curProfile == "turntable");
 		}
 		else
 		{
