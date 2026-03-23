@@ -11,6 +11,9 @@
 #include "guis/GuiTextEditPopupKeyboard.h"
 #include "GuiLoading.h"
 #include "GuiBluetoothDeviceOptions.h"
+#ifdef ROCKNIX
+#include "RxnmNetwork.h"
+#endif
 
 GuiBluetoothDevices::GuiBluetoothDevices(Window* window)
 	: GuiComponent(window), mMenu(window, _("BLUETOOTH DEVICE LIST").c_str())
@@ -34,19 +37,46 @@ GuiBluetoothDevices::GuiBluetoothDevices(Window* window)
 
 bool GuiBluetoothDevices::load()
 {
-	std::vector<std::string> ssids = ApiSystem::getInstance()->getPairedBluetoothDeviceList();
-
 	mMenu.clear();
+
+#ifdef ROCKNIX
+	auto devices = RxnmNetwork::listBluetoothDevices();
+	if (devices.empty())
+	{
+		mMenu.addEntry(_("NO BLUETOOTH DEVICES FOUND"), false);
+	}
+	else
+	{
+		for (const auto& dev : devices)
+		{
+			std::string status = dev.connected ? _(" (Connected)") : "";
+			std::string connStr = dev.connected ? "yes" : "no";
+			std::string id = dev.mac;
+			std::string name = dev.name;
+
+			mMenu.addWithDescription(name + status, id, nullptr, [this, id, name, connStr]() {
+				mWindow->pushGui(new GuiBluetoothDeviceOptions(mWindow, id, name, connStr == "yes", [this]() { load(); }));
+			}, "unknown");
+		}
+	}
+
+	mMenu.updateSize();
+	if (Renderer::ScreenSettings::fullScreenMenus())
+		mMenu.setPosition((Renderer::getScreenWidth() - mMenu.getSize().x()) / 2, (Renderer::getScreenHeight() - mMenu.getSize().y()) / 2);
+
+	return !devices.empty();
+#else
+	std::vector<std::string> ssids = ApiSystem::getInstance()->getPairedBluetoothDeviceList();
 
 	if (ssids.size() == 0)
 		mMenu.addEntry(_("NO BLUETOOTH DEVICES FOUND"), false);
 	else
-    {
+	{
 		for (auto ssid : ssids)
 		{
 			if (ssid.empty())
 				continue;
-			
+
 			if (Utils::String::startsWith(ssid, "<device "))
 			{
 				auto id = Utils::String::extractString(ssid, "id=\"", "\"", false);
@@ -67,11 +97,11 @@ bool GuiBluetoothDevices::load()
 	}
 
 	mMenu.updateSize();
-
 	if (Renderer::ScreenSettings::fullScreenMenus())
 		mMenu.setPosition((Renderer::getScreenWidth() - mMenu.getSize().x()) / 2, (Renderer::getScreenHeight() - mMenu.getSize().y()) / 2);
-	
+
 	return ssids.size() > 0;
+#endif
 }
 
 bool GuiBluetoothDevices::input(InputConfig* config, Input input)

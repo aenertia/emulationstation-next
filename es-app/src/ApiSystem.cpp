@@ -518,52 +518,92 @@ int ApiSystem::GetTotalRam()
 
 bool ApiSystem::enableBluetooth()
 {
+#ifdef ROCKNIX
+	return RxnmNetwork::execJson("bluetooth", "enable");
+#else
 	return executeScript("rocknix-bluetooth enable 2>&1 >/dev/null");
+#endif
 }
 
 bool ApiSystem::disableBluetooth()
 {
+#ifdef ROCKNIX
+	return RxnmNetwork::execJson("bluetooth", "disable");
+#else
 	return executeScript("rocknix-bluetooth disable");
+#endif
 }
 
 void ApiSystem::startBluetoothLiveDevices(const std::function<void(const std::string)>& func)
 {
+#ifdef ROCKNIX
+	executeScript("rxnm bluetooth live-scan --timeout 60 --format json", func);
+#else
 	executeScript("rocknix-bluetooth live_devices", func);
+#endif
 }
 
 void ApiSystem::stopBluetoothLiveDevices()
 {
+#ifdef ROCKNIX
+	executeScript("pkill -f 'rxnm bluetooth live-scan' 2>/dev/null; true");
+#else
 	executeScript("rocknix-bluetooth stop_live_devices");
+#endif
 }
 
 bool ApiSystem::pairBluetoothDevice(const std::string& deviceName)
 {
+#ifdef ROCKNIX
+	return RxnmNetwork::execJson("bluetooth", "pair", {{"mac", deviceName}});
+#else
 	return executeScript("rocknix-bluetooth trust " + deviceName);
+#endif
 }
 
 bool ApiSystem::connectBluetoothDevice(const std::string& deviceName)
 {
+#ifdef ROCKNIX
+	return RxnmNetwork::execJson("bluetooth", "connect", {{"mac", deviceName}});
+#else
 	return executeScript("rocknix-bluetooth connect " + deviceName);
+#endif
 }
 
 bool ApiSystem::disconnectBluetoothDevice(const std::string& deviceName)
 {
+#ifdef ROCKNIX
+	return RxnmNetwork::execJson("bluetooth", "disconnect", {{"mac", deviceName}});
+#else
 	return executeScript("rocknix-bluetooth disconnect " + deviceName);
+#endif
 }
 
 bool ApiSystem::removeBluetoothDevice(const std::string& deviceName)
 {
+#ifdef ROCKNIX
+	return RxnmNetwork::execJson("bluetooth", "unpair", {{"mac", deviceName}});
+#else
 	return executeScript("rocknix-bluetooth remove " + deviceName);
+#endif
 }
 
 bool ApiSystem::scanNewBluetooth(const std::function<void(const std::string)>& func)
 {
+#ifdef ROCKNIX
+	return executeScript("rxnm bluetooth auto-pair --filter input --timeout 30 --format json", func).second == 0;
+#else
 	return executeScript("rocknix-bluetooth trust input", func).second == 0;
+#endif
 }
 
 std::vector<std::string> ApiSystem::getPairedBluetoothDeviceList()
 {
+#ifdef ROCKNIX
+	return executeEnumerationScript("rxnm bluetooth list --format json 2>/dev/null");
+#else
 	return executeEnumerationScript("rocknix-bluetooth list");
+#endif
 }
 
 std::vector<std::string> ApiSystem::getAvailableStorageDevices() 

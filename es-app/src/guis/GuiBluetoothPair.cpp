@@ -10,6 +10,9 @@
 #include "guis/GuiTextEditPopup.h"
 #include "guis/GuiTextEditPopupKeyboard.h"
 #include "GuiLoading.h"
+#ifdef ROCKNIX
+#include <rapidjson/document.h>
+#endif
 
 #define WINDOW_WIDTH (float)Math::min(Renderer::getScreenHeight() * 1.125f, Renderer::getScreenWidth() * 0.90f)
 
@@ -73,7 +76,42 @@ void GuiBluetoothPair::loadDevicesAsync()
 
 	ApiSystem::getInstance()->startBluetoothLiveDevices([window](const std::string deviceInfo)
 	{
-		if (Instance != nullptr && Utils::String::startsWith(deviceInfo, "<device "))
+		if (Instance == nullptr)
+			return;
+
+#ifdef ROCKNIX
+		// Parse JSON-per-line from rxnm bluetooth live-scan
+		rapidjson::Document doc;
+		doc.Parse(deviceInfo.c_str());
+		if (doc.HasParseError() || !doc.IsObject())
+			return;
+
+		std::string id = doc.HasMember("mac") && doc["mac"].IsString() ? doc["mac"].GetString() : "";
+		std::string name = doc.HasMember("name") && doc["name"].IsString() ? doc["name"].GetString() : "Unknown";
+		std::string event = doc.HasMember("event") && doc["event"].IsString() ? doc["event"].GetString() : "added";
+		std::string icon = doc.HasMember("icon") && doc["icon"].IsString() ? doc["icon"].GetString() : "unknown";
+
+		if (id.empty())
+			return;
+
+		window->postToUiThread([id, name, event, icon]
+		{
+			if (Instance == nullptr || Instance->mIsPairing)
+				return;
+
+			if (event == "removed")
+				Instance->removeEntry(id);
+			else
+			{
+				Instance->addWithDescription(name, id, nullptr, [id]()
+				{
+					if (Instance != nullptr)
+						Instance->onPairDevice(id);
+				}, icon, false, false, id, false);
+			}
+		});
+#else
+		if (Utils::String::startsWith(deviceInfo, "<device "))
 		{
 			auto id = Utils::String::extractString(deviceInfo, "id=\"", "\"", false);
 			auto name = Utils::String::extractString(deviceInfo, "name=\"", "\"", false);
@@ -98,7 +136,8 @@ void GuiBluetoothPair::loadDevicesAsync()
 				}
 			});
 		}
-	});	
+#endif
+	});
 }
 
 bool GuiBluetoothPair::input(InputConfig* config, Input input)

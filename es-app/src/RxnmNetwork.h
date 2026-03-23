@@ -67,6 +67,10 @@ public:
     // Generic mutator — calls "rxnm <args> --format json", returns exit code == 0
     static bool exec(const std::string& args);
 
+    // JSON-safe mutator — pipes JSON input to rxnm via stdin (no shell escaping)
+    static bool execJson(const std::string& category, const std::string& action,
+                         const std::map<std::string, std::string>& params = {});
+
     // Reload networkd to pick up config changes
     static bool reload();
 

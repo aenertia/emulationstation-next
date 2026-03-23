@@ -46,6 +46,26 @@ bool RxnmNetwork::exec(const std::string& args)
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
+bool RxnmNetwork::execJson(const std::string& category, const std::string& action,
+                           const std::map<std::string, std::string>& params)
+{
+    // Build JSON input: {"category":"...","action":"...","key":"val",...}
+    std::string json = "{\"category\":\"" + category + "\",\"action\":\"" + action + "\"";
+    for (const auto& kv : params)
+        json += ",\"" + kv.first + "\":\"" + kv.second + "\"";
+    json += "}";
+
+    std::string cmd = "echo '" + json + "' | rxnm --stdin --format json 2>/dev/null";
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) return false;
+
+    char buf[4096];
+    while (fgets(buf, sizeof(buf), pipe)) {}
+
+    int status = pclose(pipe);
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
 bool RxnmNetwork::reload()
 {
     return exec("system reload");
