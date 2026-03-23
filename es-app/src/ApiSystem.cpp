@@ -519,7 +519,9 @@ int ApiSystem::GetTotalRam()
 bool ApiSystem::enableBluetooth()
 {
 #ifdef ROCKNIX
-	return RxnmNetwork::execJson("bluetooth", "enable");
+	// Async — BT enable can take seconds (service start + adapter power on)
+	Utils::Platform::runSystemCommand("rxnm bluetooth enable --format json 2>/dev/null &", "", nullptr);
+	return true;
 #else
 	return executeScript("rocknix-bluetooth enable 2>&1 >/dev/null");
 #endif
@@ -528,7 +530,9 @@ bool ApiSystem::enableBluetooth()
 bool ApiSystem::disableBluetooth()
 {
 #ifdef ROCKNIX
-	return RxnmNetwork::execJson("bluetooth", "disable");
+	// Async — rfkill block triggers service stop which can block
+	Utils::Platform::runSystemCommand("rxnm bluetooth disable --format json 2>/dev/null &", "", nullptr);
+	return true;
 #else
 	return executeScript("rocknix-bluetooth disable");
 #endif
