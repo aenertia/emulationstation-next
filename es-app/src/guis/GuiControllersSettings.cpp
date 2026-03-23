@@ -245,7 +245,7 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 	addSwitch(_("DRAW GUN CROSSHAIR"), "DrawGunCrosshair", true);
 
 #ifdef ROCKNIX
-	// CONTROLLER OUTPUT — expose device as gamepad to external hosts via rxjoy or legacy bridge
+	// CONTROLLER OUTPUT - expose device as gamepad to external hosts via rxjoy or legacy bridge
 	bool hasRxjoy = Utils::FileSystem::exists("/usr/bin/rxjoy");
 	bool hasGadgetController = Utils::FileSystem::exists("/usr/bin/gadget-controller");
 	if (hasRxjoy || hasGadgetController)
@@ -261,7 +261,7 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 			outputMode->add(_("BLUETOOTH"), "bluetooth", curMode == "bluetooth");
 		addWithLabel(_("OUTPUT MODE"), outputMode);
 
-		// Output Profile — rxjoy profiles or legacy type selector
+		// Output Profile - rxjoy profiles or legacy type selector
 		auto outputProfile = std::make_shared<OptionListComponent<std::string>>(mWindow, _("OUTPUT PROFILE"), false);
 		std::string curProfile = SystemConf::getInstance()->get("system.controller_output.profile");
 		if (hasRxjoy)
@@ -357,7 +357,7 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 		});
 	}
 
-	// INPUTPLUMBER TARGET — change what internal controller appears as
+	// INPUTPLUMBER TARGET - change what internal controller appears as
 	if (Utils::FileSystem::exists("/usr/bin/inputplumber"))
 	{
 		addGroup(_("INTERNAL CONTROLLER"));
@@ -383,7 +383,7 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 			}
 		});
 
-		// Default Profile — loaded when not running an emulator
+		// Default Profile - loaded when not running an emulator
 		// Scan system profiles + user dropins (user overrides system with same name)
 		const std::string sysProfileDir = "/usr/share/inputplumber/profiles";
 		const std::string userProfileDir = "/storage/.config/inputplumber/profiles";
@@ -443,7 +443,7 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 		}
 	}
 
-	// GLOBAL HOTKEYS — input_sense key bindings
+	// GLOBAL HOTKEYS - input_sense key bindings
 	addGroup(_("SYSTEM HOTKEYS"));
 	addEntry(_("CONFIGURE HOTKEYS"), true, [this] { openInputSenseHotkeys(); });
 #endif
@@ -1018,7 +1018,7 @@ void GuiControllersSettings::openInputSenseHotkeys()
 	auto fnABDown = makeActionList(_("FN(A+B) + VOL DOWN"), "key.function.ab.down", "wifictl disable");
 	s->addWithLabel(_("FN(A+B) + VOL DOWN"), fnABDown);
 
-	// Save all settings — requires input_sense restart to take effect
+	// Save all settings - requires input_sense restart to take effect
 	s->addSaveFunc([fnA, fnB, killA, killB, killC, fnAUp, fnADown, fnBUp, fnBDown, fnABUp, fnABDown] {
 		bool changed = false;
 		auto sc = SystemConf::getInstance();
