@@ -2192,6 +2192,130 @@ void GuiMenu::openSystemSettings()
 				}
 			});
 
+			// Swappiness
+			auto swapOpts = std::make_shared<OptionListComponent<std::string>>(window, _("SWAPPINESS"), false);
+			std::string curSwap = SystemConf::getInstance()->get("memory.swappiness");
+			if (curSwap.empty()) curSwap = "auto";
+			swapOpts->add(_("AUTO"), "auto", curSwap == "auto");
+			swapOpts->add("60", "60", curSwap == "60");
+			swapOpts->add("80", "80", curSwap == "80");
+			swapOpts->add("100", "100", curSwap == "100");
+			swapOpts->add("150", "150", curSwap == "150");
+			swapOpts->add("200", "200", curSwap == "200");
+			mm->addWithLabel(_("SWAPPINESS"), swapOpts);
+			mm->addSaveFunc([swapOpts, curSwap] {
+				if (swapOpts->getSelected() != curSwap) {
+					SystemConf::getInstance()->set("memory.swappiness", swapOpts->getSelected());
+					Utils::Platform::runSystemCommand("rocknix-memory-manager --swappiness " + swapOpts->getSelected() + " --reload", "", nullptr);
+				}
+			});
+
+			// VM Overcommit
+			auto ocOpts = std::make_shared<OptionListComponent<std::string>>(window, _("VM OVERCOMMIT"), false);
+			std::string curOc = SystemConf::getInstance()->get("memory.vm_overcommit");
+			if (curOc.empty()) curOc = "auto";
+			ocOpts->add(_("AUTO"), "auto", curOc == "auto");
+			ocOpts->add(_("HEURISTIC"), "0", curOc == "0");
+			ocOpts->add(_("ALWAYS"), "1", curOc == "1");
+			ocOpts->add(_("NEVER"), "2", curOc == "2");
+			mm->addWithLabel(_("VM OVERCOMMIT"), ocOpts);
+			mm->addSaveFunc([ocOpts, curOc] {
+				if (ocOpts->getSelected() != curOc) {
+					SystemConf::getInstance()->set("memory.vm_overcommit", ocOpts->getSelected());
+					Utils::Platform::runSystemCommand("rocknix-memory-manager --vm-overcommit " + ocOpts->getSelected() + " --reload", "", nullptr);
+				}
+			});
+
+			// VFS Cache Pressure
+			auto vfsOpts = std::make_shared<OptionListComponent<std::string>>(window, _("VFS CACHE PRESSURE"), false);
+			std::string curVfs = SystemConf::getInstance()->get("memory.vfs_cache_pressure");
+			if (curVfs.empty()) curVfs = "auto";
+			vfsOpts->add(_("AUTO"), "auto", curVfs == "auto");
+			vfsOpts->add("50", "50", curVfs == "50");
+			vfsOpts->add("75", "75", curVfs == "75");
+			vfsOpts->add("100", "100", curVfs == "100");
+			vfsOpts->add("150", "150", curVfs == "150");
+			vfsOpts->add("200", "200", curVfs == "200");
+			mm->addWithLabel(_("VFS CACHE PRESSURE"), vfsOpts);
+			mm->addSaveFunc([vfsOpts, curVfs] {
+				if (vfsOpts->getSelected() != curVfs) {
+					SystemConf::getInstance()->set("memory.vfs_cache_pressure", vfsOpts->getSelected());
+					Utils::Platform::runSystemCommand("rocknix-memory-manager --vfs-cache-pressure " + vfsOpts->getSelected() + " --reload", "", nullptr);
+				}
+			});
+
+			// Dirty Ratio
+			auto dirtyOpts = std::make_shared<OptionListComponent<std::string>>(window, _("DIRTY RATIO"), false);
+			std::string curDirty = SystemConf::getInstance()->get("memory.dirty_ratio");
+			if (curDirty.empty()) curDirty = "auto";
+			dirtyOpts->add(_("AUTO"), "auto", curDirty == "auto");
+			dirtyOpts->add("5%", "5", curDirty == "5");
+			dirtyOpts->add("10%", "10", curDirty == "10");
+			dirtyOpts->add("20%", "20", curDirty == "20");
+			dirtyOpts->add("40%", "40", curDirty == "40");
+			mm->addWithLabel(_("DIRTY RATIO"), dirtyOpts);
+			mm->addSaveFunc([dirtyOpts, curDirty] {
+				if (dirtyOpts->getSelected() != curDirty) {
+					SystemConf::getInstance()->set("memory.dirty_ratio", dirtyOpts->getSelected());
+					Utils::Platform::runSystemCommand("rocknix-memory-manager --dirty-ratio " + dirtyOpts->getSelected() + " --reload", "", nullptr);
+				}
+			});
+
+			// Compaction
+			auto compOpts = std::make_shared<OptionListComponent<std::string>>(window, _("COMPACTION"), false);
+			std::string curComp = SystemConf::getInstance()->get("memory.vm_compaction");
+			if (curComp.empty()) curComp = "auto";
+			compOpts->add(_("AUTO"), "auto", curComp == "auto");
+			compOpts->add(_("OFF"), "0", curComp == "0");
+			compOpts->add(_("LOW"), "10", curComp == "10");
+			compOpts->add(_("MODERATE"), "20", curComp == "20");
+			compOpts->add(_("AGGRESSIVE"), "40", curComp == "40");
+			mm->addWithLabel(_("COMPACTION"), compOpts);
+			mm->addSaveFunc([compOpts, curComp] {
+				if (compOpts->getSelected() != curComp) {
+					SystemConf::getInstance()->set("memory.vm_compaction", compOpts->getSelected());
+					Utils::Platform::runSystemCommand("rocknix-memory-manager --vm-compaction " + compOpts->getSelected() + " --reload", "", nullptr);
+				}
+			});
+
+			// Transparent Huge Pages
+			auto thpOpts = std::make_shared<OptionListComponent<std::string>>(window, _("TRANSPARENT HUGE PAGES"), false);
+			std::string curThp = SystemConf::getInstance()->get("memory.thp");
+			if (curThp.empty()) curThp = "auto";
+			thpOpts->add(_("AUTO"), "auto", curThp == "auto");
+			thpOpts->add(_("ALWAYS"), "always", curThp == "always");
+			thpOpts->add(_("MADVISE"), "madvise", curThp == "madvise");
+			thpOpts->add(_("NEVER"), "never", curThp == "never");
+			mm->addWithLabel(_("TRANSPARENT HUGE PAGES"), thpOpts);
+			mm->addSaveFunc([thpOpts, curThp] {
+				if (thpOpts->getSelected() != curThp) {
+					SystemConf::getInstance()->set("memory.thp", thpOpts->getSelected());
+					Utils::Platform::runSystemCommand("rocknix-memory-manager --thp " + thpOpts->getSelected() + " --reload", "", nullptr);
+				}
+			});
+
+			// Max Map Count
+			auto mapOpts = std::make_shared<OptionListComponent<std::string>>(window, _("MAX MAP COUNT"), false);
+			std::string curMap = SystemConf::getInstance()->get("memory.max_map_count");
+			if (curMap.empty()) curMap = "auto";
+			mapOpts->add(_("AUTO"), "auto", curMap == "auto");
+			mapOpts->add("65530", "65530", curMap == "65530");
+			mapOpts->add("262144", "262144", curMap == "262144");
+			mapOpts->add("1048576", "1048576", curMap == "1048576");
+			mm->addWithLabel(_("MAX MAP COUNT"), mapOpts);
+			mm->addSaveFunc([mapOpts, curMap] {
+				if (mapOpts->getSelected() != curMap) {
+					SystemConf::getInstance()->set("memory.max_map_count", mapOpts->getSelected());
+					Utils::Platform::runSystemCommand("rocknix-memory-manager --max-map-count " + mapOpts->getSelected() + " --reload", "", nullptr);
+				}
+			});
+
+			// Drop Caches action
+			mm->addEntry(_("DROP CACHES"), false, [window] {
+				Utils::Platform::runSystemCommand("rocknix-memory-manager --drop-caches", "", nullptr);
+				window->pushGui(new GuiMsgBox(window, _("CACHES DROPPED"), _("OK")));
+			});
+
 			window->pushGui(mm);
 		});
 	}

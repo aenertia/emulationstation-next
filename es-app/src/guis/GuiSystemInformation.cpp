@@ -113,6 +113,45 @@ GuiSystemInformation::GuiSystemInformation(Window* window) : GuiSettings(window,
 				addWithLabel(_("ZRAM COMPRESSED"), std::make_shared<TextComponent>(window, zramStr, font, color));
 			}
 		}
+
+		// KSM savings
+		{
+			std::ifstream ksmRun("/sys/kernel/mm/ksm/run");
+			if (ksmRun.good()) {
+				int running = 0;
+				ksmRun >> running;
+				if (running == 1) {
+					std::ifstream ksmPages("/sys/kernel/mm/ksm/pages_sharing");
+					if (ksmPages.good()) {
+						long pages = 0;
+						ksmPages >> pages;
+						long savedMB = (pages * 4096) / 1024 / 1024;
+						addWithLabel(_("KSM SAVINGS"), std::make_shared<TextComponent>(window,
+							std::to_string(savedMB) + " MB", font, color));
+					}
+				}
+			}
+		}
+
+		// Key VM tunables
+		auto readSysctl = [](const std::string& path) -> std::string {
+			std::ifstream f(path);
+			std::string val;
+			if (f.good()) std::getline(f, val);
+			return val;
+		};
+
+		std::string swappiness = readSysctl("/proc/sys/vm/swappiness");
+		if (!swappiness.empty())
+			addWithLabel(_("SWAPPINESS"), std::make_shared<TextComponent>(window, swappiness, font, color));
+
+		std::string compaction = readSysctl("/proc/sys/vm/compaction_proactiveness");
+		if (!compaction.empty())
+			addWithLabel(_("COMPACTION"), std::make_shared<TextComponent>(window, compaction, font, color));
+
+		std::string maxMap = readSysctl("/proc/sys/vm/max_map_count");
+		if (!maxMap.empty())
+			addWithLabel(_("MAX MAP COUNT"), std::make_shared<TextComponent>(window, maxMap, font, color));
 	}
 #endif
 
