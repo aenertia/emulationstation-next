@@ -345,7 +345,7 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 
 		auto ipTarget = std::make_shared<OptionListComponent<std::string>>(mWindow, _("CONTROLLER MODE"), false);
 		std::string curTarget = SystemConf::getInstance()->get("system.inputplumber.target");
-		if (curTarget.empty()) curTarget = "xbox-series";
+		if (curTarget.empty()) curTarget = "ds5";
 		ipTarget->add(_("XBOX SERIES"), "xbox-series", curTarget == "xbox-series");
 		ipTarget->add(_("DUALSENSE"), "ds5", curTarget == "ds5");
 		ipTarget->add(_("STEAM DECK"), "deck", curTarget == "deck");
