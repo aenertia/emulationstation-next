@@ -3141,6 +3141,75 @@ void GuiMenu::openSystemOptionsConfiguration(Window* mWindow, std::string config
 				std::to_string((int)Math::round(uclampSlider->getValue())));
 		});
 
+		guiSystemOptions->addGroup(_("MEMORY"));
+
+		// Drop caches before launch (default: ON)
+		auto dropCacheOpts = std::make_shared<OptionListComponent<std::string>>(mWindow, _("DROP CACHES"), false);
+		std::string curDropCache = SystemConf::getInstance()->get(configName + ".drop_caches");
+		if (curDropCache.empty()) curDropCache = "1";
+		dropCacheOpts->add(_("ON"), "1", curDropCache == "1");
+		dropCacheOpts->add(_("OFF"), "0", curDropCache == "0");
+		guiSystemOptions->addWithLabel(_("DROP CACHES BEFORE LAUNCH"), dropCacheOpts);
+		guiSystemOptions->addSaveFunc([dropCacheOpts, configName] {
+			SystemConf::getInstance()->set(configName + ".drop_caches", dropCacheOpts->getSelected());
+		});
+
+		// Per-game swappiness
+		auto pgSwapOpts = std::make_shared<OptionListComponent<std::string>>(mWindow, _("SWAPPINESS"), false);
+		std::string curPgSwap = SystemConf::getInstance()->get(configName + ".vm_swappiness");
+		if (curPgSwap.empty()) curPgSwap = "default";
+		pgSwapOpts->add(_("DEFAULT"), "default", curPgSwap == "default");
+		pgSwapOpts->add("60", "60", curPgSwap == "60");
+		pgSwapOpts->add("80", "80", curPgSwap == "80");
+		pgSwapOpts->add("100", "100", curPgSwap == "100");
+		pgSwapOpts->add("150", "150", curPgSwap == "150");
+		pgSwapOpts->add("200", "200", curPgSwap == "200");
+		guiSystemOptions->addWithLabel(_("SWAPPINESS"), pgSwapOpts);
+		guiSystemOptions->addSaveFunc([pgSwapOpts, configName] {
+			SystemConf::getInstance()->set(configName + ".vm_swappiness", pgSwapOpts->getSelected());
+		});
+
+		// Per-game max map count
+		auto pgMapOpts = std::make_shared<OptionListComponent<std::string>>(mWindow, _("MAX MAP COUNT"), false);
+		std::string curPgMap = SystemConf::getInstance()->get(configName + ".vm_max_map_count");
+		if (curPgMap.empty()) curPgMap = "default";
+		pgMapOpts->add(_("DEFAULT"), "default", curPgMap == "default");
+		pgMapOpts->add("65530", "65530", curPgMap == "65530");
+		pgMapOpts->add("262144", "262144", curPgMap == "262144");
+		pgMapOpts->add("1048576", "1048576", curPgMap == "1048576");
+		guiSystemOptions->addWithLabel(_("MAX MAP COUNT"), pgMapOpts);
+		guiSystemOptions->addSaveFunc([pgMapOpts, configName] {
+			SystemConf::getInstance()->set(configName + ".vm_max_map_count", pgMapOpts->getSelected());
+		});
+
+		// Per-game VM overcommit
+		auto pgOcOpts = std::make_shared<OptionListComponent<std::string>>(mWindow, _("VM OVERCOMMIT"), false);
+		std::string curPgOc = SystemConf::getInstance()->get(configName + ".vm_overcommit");
+		if (curPgOc.empty()) curPgOc = "default";
+		pgOcOpts->add(_("DEFAULT"), "default", curPgOc == "default");
+		pgOcOpts->add(_("HEURISTIC"), "0", curPgOc == "0");
+		pgOcOpts->add(_("ALWAYS"), "1", curPgOc == "1");
+		pgOcOpts->add(_("NEVER"), "2", curPgOc == "2");
+		guiSystemOptions->addWithLabel(_("VM OVERCOMMIT"), pgOcOpts);
+		guiSystemOptions->addSaveFunc([pgOcOpts, configName] {
+			SystemConf::getInstance()->set(configName + ".vm_overcommit", pgOcOpts->getSelected());
+		});
+
+		// Per-game VFS cache pressure
+		auto pgVfsOpts = std::make_shared<OptionListComponent<std::string>>(mWindow, _("VFS CACHE PRESSURE"), false);
+		std::string curPgVfs = SystemConf::getInstance()->get(configName + ".vm_vfs_cache_pressure");
+		if (curPgVfs.empty()) curPgVfs = "default";
+		pgVfsOpts->add(_("DEFAULT"), "default", curPgVfs == "default");
+		pgVfsOpts->add("50", "50", curPgVfs == "50");
+		pgVfsOpts->add("75", "75", curPgVfs == "75");
+		pgVfsOpts->add("100", "100", curPgVfs == "100");
+		pgVfsOpts->add("150", "150", curPgVfs == "150");
+		pgVfsOpts->add("200", "200", curPgVfs == "200");
+		guiSystemOptions->addWithLabel(_("VFS CACHE PRESSURE"), pgVfsOpts);
+		guiSystemOptions->addSaveFunc([pgVfsOpts, configName] {
+			SystemConf::getInstance()->set(configName + ".vm_vfs_cache_pressure", pgVfsOpts->getSelected());
+		});
+
 		guiSystemOptions->addGroup(_("HARDWARE"));
 	}
 
