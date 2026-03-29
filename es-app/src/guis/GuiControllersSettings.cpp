@@ -201,12 +201,12 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 				auto s2 = new GuiSettings(window, _("BLUETOOTH TETHERING"));
 				s2->addEntry(_("ENABLE PAN CLIENT"), false, [window] {
 					window->pushGui(new GuiLoading<bool>(window, _("ENABLING BT TETHERING..."),
-						[](auto gui) { return RxnmNetwork::exec("bluetooth pan enable --mode client"); },
+						[](auto gui) { return RxnmNetwork::exec("bluetooth", "pan", {{"subcommand", "enable"}, {"mode", "client"}}); },
 						[window](bool ok) { window->pushGui(new GuiMsgBox(window, ok ? _("BT TETHERING ENABLED") : _("FAILED"))); }));
 				});
 				s2->addEntry(_("DISABLE PAN"), false, [window] {
 					window->pushGui(new GuiLoading<bool>(window, _("DISABLING..."),
-						[](auto gui) { return RxnmNetwork::exec("bluetooth pan disable"); },
+						[](auto gui) { return RxnmNetwork::exec("bluetooth", "pan", {{"subcommand", "disable"}}); },
 						[window](bool ok) { window->pushGui(new GuiMsgBox(window, _("BT TETHERING DISABLED"))); }));
 				});
 				window->pushGui(s2);
@@ -345,7 +345,7 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 
 		auto ipTarget = std::make_shared<OptionListComponent<std::string>>(mWindow, _("CONTROLLER MODE"), false);
 		std::string curTarget = SystemConf::getInstance()->get("system.inputplumber.target");
-		if (curTarget.empty()) curTarget = "ds5";
+		if (curTarget.empty()) curTarget = "xbox-series";
 		ipTarget->add(_("XBOX SERIES"), "xbox-series", curTarget == "xbox-series");
 		ipTarget->add(_("DUALSENSE"), "ds5", curTarget == "ds5");
 		ipTarget->add(_("STEAM DECK"), "deck", curTarget == "deck");
@@ -948,6 +948,12 @@ void GuiControllersSettings::openInputSenseHotkeys()
 			{ "LED OFF",          "ledcontrol poweroff" },
 			{ "WIFI ENABLE",      "wifictl enable" },
 			{ "WIFI DISABLE",     "wifictl disable" },
+			{ "DISPLAY CYCLE",    "display-cycle move" },
+			{ "DISPLAY MIRROR",   "display-cycle mirror" },
+			{ "DISPLAY OFF/ON",   "display-cycle off" },
+			{ "SCREEN SWITCH",    "screen_switch" },
+			{ "SCREENSHOT",       "rocknix-screenshot" },
+			{ "TOGGLE MANGOHUD",  "mangohud_set toggle" },
 		};
 		for (const auto& a : actions)
 			list->add(_(a.label), a.code, cur == a.code);
@@ -999,8 +1005,33 @@ void GuiControllersSettings::openInputSenseHotkeys()
 	auto fnABDown = makeActionList(_("FN(A+B) + VOL DOWN"), "key.function.ab.down", "wifictl disable");
 	s->addWithLabel(_("FN(A+B) + VOL DOWN"), fnABDown);
 
+	// --- FN+Trigger Actions (display cycling) ---
+	s->addGroup(_("FN + TRIGGER ACTIONS"));
+
+	auto fnAL2 = makeActionList(_("FN(A) + L2"), "key.function.a.l2", "display-cycle move");
+	s->addWithLabel(_("FN(A) + L2"), fnAL2);
+
+	auto fnAR2 = makeActionList(_("FN(A) + R2"), "key.function.a.r2", "display-cycle mirror");
+	s->addWithLabel(_("FN(A) + R2"), fnAR2);
+
+	// --- Hotkey Button Combos ---
+	s->addGroup(_("HOTKEY BUTTON COMBOS"));
+
+	auto hkEast = makeActionList(_("HOTKEY + B"), "key.hotkey.a.east", "rocknix-screenshot");
+	s->addWithLabel(_("HOTKEY + B"), hkEast);
+
+	auto hkWest = makeActionList(_("HOTKEY + Y"), "key.hotkey.a.west", "mangohud_set toggle");
+	s->addWithLabel(_("HOTKEY + Y"), hkWest);
+
+	auto hkNorth = makeActionList(_("HOTKEY + X"), "key.hotkey.a.north", "game-guides-tool");
+	s->addWithLabel(_("HOTKEY + X"), hkNorth);
+
+	auto hkBack = makeActionList(_("HOTKEY + BACK"), "key.hotkey.a.back", "screen_switch");
+	s->addWithLabel(_("HOTKEY + BACK"), hkBack);
+
 	// Save all settings - requires input_sense restart to take effect
-	s->addSaveFunc([fnA, fnB, killA, killB, killC, fnAUp, fnADown, fnBUp, fnBDown, fnABUp, fnABDown] {
+	s->addSaveFunc([fnA, fnB, killA, killB, killC, fnAUp, fnADown, fnBUp, fnBDown, fnABUp, fnABDown,
+	                fnAL2, fnAR2, hkEast, hkWest, hkNorth, hkBack] {
 		bool changed = false;
 		auto sc = SystemConf::getInstance();
 
@@ -1023,6 +1054,12 @@ void GuiControllersSettings::openInputSenseHotkeys()
 		save("key.function.b.down", fnBDown);
 		save("key.function.ab.up", fnABUp);
 		save("key.function.ab.down", fnABDown);
+		save("key.function.a.l2", fnAL2);
+		save("key.function.a.r2", fnAR2);
+		save("key.hotkey.a.east", hkEast);
+		save("key.hotkey.a.west", hkWest);
+		save("key.hotkey.a.north", hkNorth);
+		save("key.hotkey.a.back", hkBack);
 
 		if (changed) {
 			// Restart input_sense to pick up new bindings

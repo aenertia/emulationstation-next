@@ -5528,11 +5528,8 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 	if (RxnmNetwork::isAvailable()) {
 		auto sysStatus = RxnmNetwork::getSystemStatus();
 
-		// Helper to strip CIDR prefix notation (e.g. "192.168.1.1/24" -> "192.168.1.1")
-		auto stripCidr = [](const std::string& addr) -> std::string {
-			auto pos = addr.find('/');
-			return (pos != std::string::npos) ? addr.substr(0, pos) : addr;
-		};
+		// Use shared stripCidr utility from RxnmNetwork
+		auto stripCidr = [](const std::string& addr) { return RxnmNetwork::stripCidr(addr); };
 
 		// Build HOSTNAME.DOMAIN from rxnm status
 		std::string fqdn = sysStatus.hostname.empty() ? "ROCKNIX" : sysStatus.hostname;
@@ -5997,9 +5994,10 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 			s->addWithLabel(_("WIREGUARD") + " - " + profileName, wgToggle);
 			wgToggle->setOnChangedCallback([wgToggle, wgPath, profileName] {
 				if (wgToggle->getState()) {
-					RxnmNetwork::exec("wg-import \"" + wgPath + "\" " + profileName);
+					// wg-import is an rxnm plugin — use CLI invocation (path is kernel-controlled, no injection risk)
+					Utils::Platform::runSystemCommand("rxnm wg-import '" + wgPath + "' " + profileName + " 2>/dev/null", "", nullptr);
 				} else {
-					RxnmNetwork::exec("--yes vpn wireguard disconnect " + profileName);
+					RxnmNetwork::exec("vpn", "disconnect", {{"name", profileName}, {"force", "true"}});
 				}
 			});
 		}
@@ -6034,7 +6032,7 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 	auto zerotier = std::make_shared<SwitchComponent>(mWindow);
 	bool ztUp = SystemConf::getInstance()->get("zerotier.up") == "1";
 	zerotier->setState(ztUp);
-	s->addWithLabel(_("ZeroTier One"), zerotier);
+	s->addWithLabel(_("ZEROTIER VPN"), zerotier);
 	zerotier->setOnChangedCallback([zerotier] {
 		bool ztEnabled = zerotier->getState();
 		if(ztEnabled) {

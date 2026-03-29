@@ -77,8 +77,8 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 					_("YES"), [window, ssid] {
 						window->pushGui(new GuiLoading<bool>(window, _("FORGETTING NETWORK..."),
 							[ssid](auto gui) {
-								RxnmNetwork::exec("wifi disconnect");
-								RxnmNetwork::exec("wifi forget \"" + ssid + "\"");
+								RxnmNetwork::exec("wifi", "disconnect");
+								RxnmNetwork::exec("wifi", "forget", {{"ssid", ssid}});
 								return RxnmNetwork::reload();
 							},
 							[window](bool success) {
@@ -111,10 +111,10 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 									window->pushGui(new GuiLoading<bool>(window,
 										_("FORGETTING NETWORK..."),
 										[ssid](auto gui) {
-											RxnmNetwork::exec("wifi forget \"" + ssid + "\"");
+											RxnmNetwork::exec("wifi", "forget", {{"ssid", ssid}});
 											return RxnmNetwork::reload();
 										},
-										[window, s2](bool success) { delete s2; }));
+										[window, s2](bool success) { s2->close(); }));
 								},
 								_("NO"), nullptr));
 						});
@@ -134,7 +134,7 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 				if (apSsid.empty()) { window->pushGui(new GuiMsgBox(window, _("PLEASE SET A HOTSPOT SSID"))); return; }
 				window->pushGui(new GuiLoading<bool>(window, _("STARTING HOTSPOT..."),
 					[apSsid, apKey](auto gui) {
-						RxnmNetwork::exec("wifi ap start \"" + apSsid + "\" --password \"" + apKey + "\" --share");
+						RxnmNetwork::exec("wifi", "ap", {{"subcommand", "start"}, {"ssid", apSsid}, {"password", apKey}, {"share", "true"}});
 						return RxnmNetwork::reload();
 					},
 					[window](bool ok) { window->pushGui(new GuiMsgBox(window, ok ? _("HOTSPOT STARTED") : _("HOTSPOT FAILED"))); }));
@@ -142,7 +142,7 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 
 			s2->addEntry(_("STOP HOTSPOT"), false, [window] {
 				window->pushGui(new GuiLoading<bool>(window, _("STOPPING..."),
-					[](auto gui) { RxnmNetwork::exec("wifi disconnect"); return RxnmNetwork::reload(); },
+					[](auto gui) { RxnmNetwork::exec("wifi", "disconnect"); return RxnmNetwork::reload(); },
 					[window](bool ok) { window->pushGui(new GuiMsgBox(window, _("HOTSPOT STOPPED"))); }));
 			});
 			window->pushGui(s2);
@@ -150,7 +150,7 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 
 		addEntry(_("CHECK INTERNET"), false, [window] {
 			window->pushGui(new GuiLoading<bool>(window, _("CHECKING CONNECTIVITY..."),
-				[](auto gui) { return RxnmNetwork::exec("system check internet"); },
+				[](auto gui) { return RxnmNetwork::exec("system", "check", {{"subcommand", "internet"}}); },
 				[window](bool ok) {
 					window->pushGui(new GuiMsgBox(window, ok ? _("INTERNET: CONNECTED") : _("INTERNET: NOT CONNECTED")));
 				}));
@@ -194,7 +194,7 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 
 	addEntry(_("SET DHCP"), false, [window, ifName] {
 		window->pushGui(new GuiLoading<bool>(window, _("SETTING DHCP..."),
-			[ifName](auto gui) { bool ok = RxnmNetwork::exec("interface " + ifName + " set dhcp"); RxnmNetwork::reload(); return ok; },
+			[ifName](auto gui) { bool ok = RxnmNetwork::exec("interface", "set", {{"target", ifName}, {"subcommand", "dhcp"}}); RxnmNetwork::reload(); return ok; },
 			[window](bool success) {
 				window->pushGui(new GuiMsgBox(window,
 					success ? _("DHCP CONFIGURED") : _("FAILED")));
@@ -205,7 +205,7 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 		auto updateVal = [window, ifName](const std::string& ip) {
 			if (ip.empty()) return;
 			window->pushGui(new GuiLoading<bool>(window, _("SETTING STATIC IP..."),
-				[ifName, ip](auto gui) { bool ok = RxnmNetwork::exec("interface " + ifName + " set static " + ip); RxnmNetwork::reload(); return ok; },
+				[ifName, ip](auto gui) { bool ok = RxnmNetwork::exec("interface", "set", {{"target", ifName}, {"subcommand", "static"}, {"ip", ip}}); RxnmNetwork::reload(); return ok; },
 				[window](bool success) {
 					window->pushGui(new GuiMsgBox(window,
 						success ? _("STATIC IP CONFIGURED") : _("FAILED")));
@@ -225,7 +225,7 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 	addWithLabel(_("NULLIFY MODE"), nullifySwitch);
 	addSaveFunc([nullifySwitch, ifName, initialNullify] {
 		if (nullifySwitch->getState() != initialNullify)
-			RxnmNetwork::exec(std::string("system nullify ") + (nullifySwitch->getState() ? "enable" : "disable") + " --interface " + ifName);
+			RxnmNetwork::exec("system", "nullify", {{"subcommand", nullifySwitch->getState() ? "enable" : "disable"}, {"interface", ifName}});
 	});
 
 	// Software Wake-on-LAN — enables remote wake via magic packets
@@ -244,7 +244,7 @@ GuiNetworkInterface::GuiNetworkInterface(Window* window, const std::string& ifac
 		auto updateVal = [window](const std::string& name) {
 			if (name.empty()) return;
 			window->pushGui(new GuiLoading<bool>(window, _("SAVING PROFILE..."),
-				[name](auto gui) { return RxnmNetwork::exec("profile save \"" + name + "\""); },
+				[name](auto gui) { return RxnmNetwork::exec("profile", "save", {{"name", name}}); },
 				[window](bool ok) { window->pushGui(new GuiMsgBox(window, ok ? _("PROFILE SAVED") : _("SAVE FAILED"))); }));
 		};
 		if (Settings::getInstance()->getBool("UseOSK"))

@@ -444,8 +444,9 @@ bool ApiSystem::enableWifi(std::string ssid, std::string key, std::string countr
 	if (RxnmNetwork::isAvailable()) {
 		system("rfkill unblock wifi");
 		if (!country.empty())
-			RxnmNetwork::exec("wifi country " + country);
-		bool ok = RxnmNetwork::exec("wifi connect \"" + ssid + "\" --password \"" + key + "\"");
+			RxnmNetwork::exec("wifi", "country", {{"subcommand", country}});
+		std::map<std::string, std::string> params = {{"ssid", ssid}, {"password", key}};
+		bool ok = RxnmNetwork::exec("wifi", "connect", params);
 		RxnmNetwork::reload();
 		return ok;
 	}
@@ -476,7 +477,7 @@ bool ApiSystem::disableWifi()
 {
 #ifdef ROCKNIX
 	if (RxnmNetwork::isAvailable()) {
-		RxnmNetwork::exec("wifi disconnect");
+		RxnmNetwork::exec("wifi", "disconnect");
 		RxnmNetwork::reload();
 		system("rfkill block wifi");
 		return true;
