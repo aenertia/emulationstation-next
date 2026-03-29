@@ -5900,6 +5900,26 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 		SystemConf::getInstance()->set("simplehttp.enabled", simplehttpenabled ? "1" : "0");
 	});
 
+	// ENABLE VNC
+	auto vnc_enabled = std::make_shared<SwitchComponent>(mWindow);
+	bool vncbaseEnabled = SystemConf::getInstance()->get("vnc.enabled") == "1";
+	vnc_enabled->setState(vncbaseEnabled);
+	s->addWithLabel(_("ENABLE VNC"), vnc_enabled);
+	vnc_enabled->setOnChangedCallback([vnc_enabled] {
+		if(vnc_enabled->getState() == false) {
+			Utils::Platform::runSystemCommand("systemctl stop wayvnc", "", nullptr);
+			Utils::Platform::runSystemCommand("systemctl disable wayvnc", "", nullptr);
+			Utils::Platform::runSystemCommand("rm /storage/.cache/services/wayvnc.conf", "", nullptr);
+		} else {
+			Utils::Platform::runSystemCommand("mkdir -p /storage/.cache/services/", "", nullptr);
+			Utils::Platform::runSystemCommand("touch /storage/.cache/services/wayvnc.conf", "", nullptr);
+			Utils::Platform::runSystemCommand("systemctl enable wayvnc", "", nullptr);
+			Utils::Platform::runSystemCommand("systemctl start wayvnc", "", nullptr);
+		}
+		bool vncenabled = vnc_enabled->getState();
+		SystemConf::getInstance()->set("vnc.enabled", vncenabled ? "1" : "0");
+	});
+
 	const std::string usbGadgetScript = "/usr/bin/usbgadget";
 	auto optionsUSBGadget = std::make_shared<OptionListComponent<std::string> >(mWindow, _("USB GADGET FUNCTION"), false);
 	std::string selectedUSBGadget = std::string(Utils::Platform::GetShOutput(R"(/usr/bin/usbgadget)"));
