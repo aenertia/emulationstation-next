@@ -153,9 +153,8 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 			btMode->add(_("CONTROLLER OUTPUT"), "controller", baseBtMode == "controller");
 		addWithLabel(_("BLUETOOTH MODE"), btMode, autoSel == 2);
 
-		btMode->setOnChangedCallback([this, window, btMode, baseBtMode, hasRxjoy]
+		btMode->setSelectedChangedCallback([this, window, btMode, baseBtMode, hasRxjoy](const std::string& newMode)
 		{
-			std::string newMode = btMode->getSelected();
 			if (newMode != baseBtMode)
 			{
 				// Map to setting value: "disabled" -> "0", "standard" -> "1", "controller" -> "controller"
@@ -250,7 +249,9 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 
 #if defined(BATOCERA) || defined(ROCKNIX)
 		}
-#endif
+#endif // closing brace for baseBtMode==standard / baseBtEnabled
+
+#endif // #if defined(BATOCERA) || defined(ROCKNIX) from BT mode/toggle
 
 #ifdef ROCKNIX
 		// BT Controller Output mode: show profile selector
