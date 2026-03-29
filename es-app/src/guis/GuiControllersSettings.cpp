@@ -138,7 +138,59 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 		addGroup(_("BLUETOOTH"));
 
 #if defined(BATOCERA) || defined(ROCKNIX)
-		// Bluetooth enable
+#ifdef ROCKNIX
+		// Tri-state BT mode selector: disabled / standard / controller output
+		bool hasRxjoy = Utils::FileSystem::exists("/usr/bin/rxjoy");
+		std::string baseBtMode = SystemConf::getInstance()->get("controllers.bluetooth.enabled");
+		// Normalize legacy bool values
+		if (baseBtMode == "1") baseBtMode = "standard";
+		else if (baseBtMode.empty() || baseBtMode == "0") baseBtMode = "disabled";
+
+		auto btMode = std::make_shared<OptionListComponent<std::string>>(mWindow, _("BLUETOOTH MODE"), false);
+		btMode->add(_("DISABLED"), "disabled", baseBtMode == "disabled");
+		btMode->add(_("STANDARD (AUDIO & INPUT)"), "standard", baseBtMode == "standard");
+		if (hasRxjoy)
+			btMode->add(_("CONTROLLER OUTPUT"), "controller", baseBtMode == "controller");
+		addWithLabel(_("BLUETOOTH MODE"), btMode, autoSel == 2);
+
+		btMode->setOnChangedCallback([this, window, btMode, baseBtMode, hasRxjoy]
+		{
+			std::string newMode = btMode->getSelected();
+			if (newMode != baseBtMode)
+			{
+				// Map to setting value: "disabled" -> "0", "standard" -> "1", "controller" -> "controller"
+				std::string settingVal = (newMode == "standard") ? "1" : (newMode == "disabled") ? "0" : newMode;
+				SystemConf::getInstance()->set("controllers.bluetooth.enabled", settingVal);
+				SystemConf::getInstance()->saveSystemConf();
+
+				if (newMode == "standard") {
+					// Stop any rxjoy-bt, enable BlueZ
+					Utils::Platform::runSystemCommand("systemctl stop 'rxjoy-bt@*' 2>/dev/null", "", nullptr);
+					ApiSystem::getInstance()->enableBluetooth();
+				} else if (newMode == "controller" && hasRxjoy) {
+					// Disable BlueZ, start rxjoy-bt
+					ApiSystem::getInstance()->disableBluetooth();
+					std::string profile = SystemConf::getInstance()->get("system.controller_output.profile");
+					if (profile.empty()) profile = "dinput";
+					Utils::Platform::runSystemCommand("systemctl start rxjoy-bt@" + profile + " 2>/dev/null &", "", nullptr);
+				} else {
+					// Disabled
+					Utils::Platform::runSystemCommand("systemctl stop 'rxjoy-bt@*' 2>/dev/null", "", nullptr);
+					ApiSystem::getInstance()->disableBluetooth();
+				}
+
+				// Rebuild menu to show/hide conditional sections
+				Window* parent = window;
+				delete this;
+				openControllersSettings(parent, 2);
+			}
+		});
+
+		// --- Conditional sections based on BT mode ---
+		if (baseBtMode == "standard")
+		{
+			// Standard BT mode: show pairing, device list, tethering
+#else
 		bool baseBtEnabled = SystemConf::getInstance()->getBool("controllers.bluetooth.enabled");
 		auto enable_bt = std::make_shared<SwitchComponent>(mWindow);
 		enable_bt->setState(baseBtEnabled);
@@ -150,31 +202,13 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 			{
 				SystemConf::getInstance()->setBool("controllers.bluetooth.enabled", btEnabled);
 				SystemConf::getInstance()->saveSystemConf();
-				if (btEnabled)
-					ApiSystem::getInstance()->enableBluetooth();
-				else
-					ApiSystem::getInstance()->disableBluetooth();
-
+				if (btEnabled) ApiSystem::getInstance()->enableBluetooth();
+				else ApiSystem::getInstance()->disableBluetooth();
 				Window* parent = window;
 				delete this;
 				openControllersSettings(parent, 2);
 			}
 		});
-
-		addSaveFunc([enable_bt]
-		{
-			bool btEnabled = enable_bt->getState();
-			if (btEnabled != SystemConf::getInstance()->getBool("controllers.bluetooth.enabled"))
-			{
-				SystemConf::getInstance()->setBool("controllers.bluetooth.enabled", btEnabled);
-				SystemConf::getInstance()->saveSystemConf();
-				if (btEnabled)
-					ApiSystem::getInstance()->enableBluetooth();
-				else
-					ApiSystem::getInstance()->disableBluetooth();
-			}
-		});
-
 		if (baseBtEnabled)
 		{
 #endif
@@ -217,6 +251,41 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 #if defined(BATOCERA) || defined(ROCKNIX)
 		}
 #endif
+
+#ifdef ROCKNIX
+		// BT Controller Output mode: show profile selector
+		if (baseBtMode == "controller" && hasRxjoy)
+		{
+			addGroup(_("BT CONTROLLER OUTPUT"));
+
+			auto btProfile = std::make_shared<OptionListComponent<std::string>>(mWindow, _("OUTPUT PROFILE"), false);
+			std::string curProfile = SystemConf::getInstance()->get("system.controller_output.profile");
+			if (curProfile.empty()) curProfile = "dinput";
+
+			btProfile->add(_("GENERIC HID (DInput)"), "dinput", curProfile == "dinput");
+			btProfile->add(_("PLAYSTATION 3"), "ps3", curProfile == "ps3");
+			btProfile->add(_("PLAYSTATION 4"), "ps4", curProfile == "ps4");
+			btProfile->add(_("PLAYSTATION 5"), "ps5", curProfile == "ps5");
+			btProfile->add(_("SWITCH PRO"), "switch", curProfile == "switch");
+			btProfile->add(_("PS CLASSIC"), "ps-classic", curProfile == "ps-classic");
+			btProfile->add(_("KEYBOARD"), "keyboard", curProfile == "keyboard");
+			btProfile->add(_("WIIMOTE"), "wiimote", curProfile == "wiimote");
+			btProfile->add(_("WIIMOTE + NUNCHUK"), "wiimote-nunchuk", curProfile == "wiimote-nunchuk");
+			btProfile->add(_("WII CLASSIC"), "wii-classic", curProfile == "wii-classic");
+			btProfile->add(_("WII U PRO"), "wii-u-pro", curProfile == "wii-u-pro");
+			addWithLabel(_("OUTPUT PROFILE"), btProfile);
+
+			addSaveFunc([btProfile] {
+				std::string profile = btProfile->getSelected();
+				std::string prev = SystemConf::getInstance()->get("system.controller_output.profile");
+				if (profile != prev) {
+					SystemConf::getInstance()->set("system.controller_output.profile", profile);
+					// Restart rxjoy-bt with new profile
+					Utils::Platform::runSystemCommand("systemctl stop 'rxjoy-bt@*' 2>/dev/null; systemctl start rxjoy-bt@" + profile + " 2>/dev/null &", "", nullptr);
+				}
+			});
+		}
+#endif
 	}
 
 	addGroup(_("DISPLAY OPTIONS"));
@@ -245,99 +314,6 @@ GuiControllersSettings::GuiControllersSettings(Window* wnd, int autoSel) : GuiSe
 	addSwitch(_("DRAW GUN CROSSHAIR"), "DrawGunCrosshair", true);
 
 #ifdef ROCKNIX
-	// CONTROLLER OUTPUT - expose device as gamepad to external hosts via rxjoy or legacy bridge
-	bool hasRxjoy = Utils::FileSystem::exists("/usr/bin/rxjoy");
-	bool hasGadgetController = Utils::FileSystem::exists("/usr/bin/gadget-controller");
-	if (hasRxjoy || hasGadgetController)
-	{
-		addGroup(_("CONTROLLER OUTPUT"));
-
-		// Output Mode
-		auto outputMode = std::make_shared<OptionListComponent<std::string>>(mWindow, _("OUTPUT MODE"), false);
-		std::string curMode = SystemConf::getInstance()->get("system.controller_output.mode");
-		outputMode->add(_("DISABLED"), "disabled", curMode != "usb" && curMode != "bluetooth");
-		outputMode->add(_("USB GADGET"), "usb", curMode == "usb");
-		if (hasRxjoy)
-			outputMode->add(_("BLUETOOTH"), "bluetooth", curMode == "bluetooth");
-		addWithLabel(_("OUTPUT MODE"), outputMode);
-
-		// Output Profile - rxjoy profiles or legacy type selector
-		auto outputProfile = std::make_shared<OptionListComponent<std::string>>(mWindow, _("OUTPUT PROFILE"), false);
-		std::string curProfile = SystemConf::getInstance()->get("system.controller_output.profile");
-		if (hasRxjoy)
-		{
-			if (curProfile.empty()) curProfile = "dinput";
-
-			// Configfs profiles (compatible with composite gadget)
-			outputProfile->add(_("GENERIC HID (DInput)"), "dinput", curProfile == "dinput");
-			outputProfile->add(_("PLAYSTATION 3"), "ps3", curProfile == "ps3");
-			outputProfile->add(_("PLAYSTATION 4"), "ps4", curProfile == "ps4");
-			outputProfile->add(_("PLAYSTATION 5"), "ps5", curProfile == "ps5");
-			outputProfile->add(_("SWITCH PRO"), "switch", curProfile == "switch");
-			outputProfile->add(_("PS CLASSIC"), "ps-classic", curProfile == "ps-classic");
-			outputProfile->add(_("KEYBOARD"), "keyboard", curProfile == "keyboard");
-			outputProfile->add(_("PC GUITAR"), "pc-guitar", curProfile == "pc-guitar");
-
-			// Bluetooth-only profiles (configfs compatible, BT transport)
-			outputProfile->add(_("WIIMOTE"), "wiimote", curProfile == "wiimote");
-			outputProfile->add(_("WIIMOTE + NUNCHUK"), "wiimote-nunchuk", curProfile == "wiimote-nunchuk");
-			outputProfile->add(_("WII CLASSIC"), "wii-classic", curProfile == "wii-classic");
-			outputProfile->add(_("WII U PRO"), "wii-u-pro", curProfile == "wii-u-pro");
-		}
-		else
-		{
-			// Legacy: basic type selector
-			if (curProfile.empty()) curProfile = "xbox";
-			outputProfile->add(_("XBOX SERIES"), "xbox", curProfile == "xbox");
-			outputProfile->add(_("DUALSENSE"), "ds5", curProfile == "ds5");
-			outputProfile->add(_("SWITCH PRO"), "switch", curProfile == "switch");
-			outputProfile->add(_("GENERIC HID"), "generic", curProfile == "generic");
-		}
-		addWithLabel(_("OUTPUT PROFILE"), outputProfile);
-
-		// Controller Audio (rxjoy only)
-		std::shared_ptr<OptionListComponent<std::string>> outputAudio;
-		if (hasRxjoy)
-		{
-			outputAudio = std::make_shared<OptionListComponent<std::string>>(mWindow, _("CONTROLLER AUDIO"), false);
-			std::string curAudio = SystemConf::getInstance()->get("system.controller_output.audio");
-			if (curAudio.empty()) curAudio = "off";
-			outputAudio->add(_("OFF"), "off", curAudio == "off");
-			outputAudio->add(_("USB (UAC2)"), "usb", curAudio == "usb");
-			outputAudio->add(_("BLUETOOTH (HFP)"), "bluetooth", curAudio == "bluetooth");
-			addWithLabel(_("CONTROLLER AUDIO"), outputAudio);
-		}
-
-		addSaveFunc([outputMode, outputProfile, outputAudio, hasRxjoy] {
-			std::string mode = outputMode->getSelected();
-			std::string profile = outputProfile->getSelected();
-			std::string prevMode = SystemConf::getInstance()->get("system.controller_output.mode");
-			std::string prevProfile = SystemConf::getInstance()->get("system.controller_output.profile");
-			bool changed = (mode != prevMode) || (profile != prevProfile);
-
-			SystemConf::getInstance()->set("system.controller_output.mode", mode);
-			SystemConf::getInstance()->set("system.controller_output.profile", profile);
-
-			if (hasRxjoy && outputAudio)
-			{
-				std::string audio = outputAudio->getSelected();
-				if (audio != SystemConf::getInstance()->get("system.controller_output.audio"))
-					changed = true;
-				SystemConf::getInstance()->set("system.controller_output.audio", audio);
-			}
-
-			if (changed)
-			{
-				if (mode == "disabled")
-					Utils::Platform::runSystemCommand("/usr/bin/usbgadget disabled 2>/dev/null &", "", nullptr);
-				else if (mode == "usb")
-					Utils::Platform::runSystemCommand("/usr/bin/usbgadget controller 2>/dev/null &", "", nullptr);
-				else if (mode == "bluetooth" && hasRxjoy)
-					Utils::Platform::runSystemCommand("systemctl start rxjoy-bt@" + profile + " 2>/dev/null &", "", nullptr);
-			}
-		});
-	}
-
 	// INPUTPLUMBER TARGET - change what internal controller appears as
 	if (Utils::FileSystem::exists("/usr/bin/inputplumber"))
 	{

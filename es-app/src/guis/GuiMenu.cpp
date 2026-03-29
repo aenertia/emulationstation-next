@@ -5264,6 +5264,7 @@ void GuiMenu::openUISettings()
 
 	s->addSwitch(_("SHOW CLOCK"), "DrawClock", true);
 	s->addSwitch(_("ON-SCREEN HELP"), "ShowHelpPrompts", true, [s] { s->setVariable("reloadAll", true); });
+	s->addSwitch(_("SHOW NETWORK INDICATOR"), "ShowNetworkIndicator", true);
 
 	if (Utils::Platform::queryBatteryInformation().hasBattery)
 		s->addOptionList(_("SHOW BATTERY STATUS"), { { _("NO"), "" },{ _("ICON"), "icon" },{ _("ICON AND TEXT"), "text" } }, "ShowBattery", true);
@@ -5583,12 +5584,6 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 #ifdef ROCKNIX
 	}
 #endif
-
-	// Network Indicator
-	auto networkIndicator = std::make_shared<SwitchComponent>(mWindow);
-	networkIndicator->setState(Settings::getInstance()->getBool("ShowNetworkIndicator"));
-	s->addWithLabel(_("SHOW NETWORK INDICATOR"), networkIndicator);
-	s->addSaveFunc([networkIndicator] { Settings::getInstance()->setBool("ShowNetworkIndicator", networkIndicator->getState()); });
 
 	s->addGroup(_("SETTINGS"));
 
@@ -5918,7 +5913,7 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 	});
 
 	const std::string usbGadgetScript = "/usr/bin/usbgadget";
-	auto optionsUSBGadget = std::make_shared<OptionListComponent<std::string> >(mWindow, _("USB GADGET FUNCTION"), false);
+	auto optionsUSBGadget = std::make_shared<OptionListComponent<std::string> >(mWindow, _("USB MODE"), false);
 	std::string selectedUSBGadget = std::string(Utils::Platform::GetShOutput(R"(/usr/bin/usbgadget)"));
 	if (selectedUSBGadget.empty())
 		selectedUSBGadget = "disabled";
@@ -5927,20 +5922,73 @@ void GuiMenu::openNetworkSettings(bool selectWifiEnable, bool selectAdhocEnable)
 	for(std::stringstream ss(Utils::Platform::GetShOutput(R"(/usr/bin/usbgadget --options)")); getline(ss, a, ' '); ) {
 		optionsUSBGadget->add(a, a, a == selectedUSBGadget);
 	}
-	s->addWithLabel(_("USB GADGET FUNCTION"), optionsUSBGadget);
+	s->addWithLabel(_("USB MODE"), optionsUSBGadget);
 
-	s->addSaveFunc([this, window, usbGadgetScript, optionsUSBGadget, selectedUSBGadget] {
+	// USB Controller Output — shown conditionally when USB MODE is "controller"
+	bool hasRxjoyUsb = Utils::FileSystem::exists("/usr/bin/rxjoy");
+	bool hasGadgetController = Utils::FileSystem::exists("/usr/bin/gadget-controller");
+	std::shared_ptr<OptionListComponent<std::string>> usbOutputProfile;
+	std::shared_ptr<OptionListComponent<std::string>> usbOutputAudio;
+
+	if (selectedUSBGadget == "controller" && (hasRxjoyUsb || hasGadgetController))
+	{
+		s->addGroup(_("USB CONTROLLER OUTPUT"));
+
+		usbOutputProfile = std::make_shared<OptionListComponent<std::string>>(mWindow, _("OUTPUT PROFILE"), false);
+		std::string curProfile = SystemConf::getInstance()->get("system.controller_output.profile");
+		if (hasRxjoyUsb)
+		{
+			if (curProfile.empty()) curProfile = "dinput";
+			usbOutputProfile->add(_("GENERIC HID (DInput)"), "dinput", curProfile == "dinput");
+			usbOutputProfile->add(_("PLAYSTATION 3"), "ps3", curProfile == "ps3");
+			usbOutputProfile->add(_("PLAYSTATION 4"), "ps4", curProfile == "ps4");
+			usbOutputProfile->add(_("PLAYSTATION 5"), "ps5", curProfile == "ps5");
+			usbOutputProfile->add(_("SWITCH PRO"), "switch", curProfile == "switch");
+			usbOutputProfile->add(_("PS CLASSIC"), "ps-classic", curProfile == "ps-classic");
+			usbOutputProfile->add(_("KEYBOARD"), "keyboard", curProfile == "keyboard");
+			usbOutputProfile->add(_("PC GUITAR"), "pc-guitar", curProfile == "pc-guitar");
+		}
+		else
+		{
+			if (curProfile.empty()) curProfile = "xbox";
+			usbOutputProfile->add(_("XBOX SERIES"), "xbox", curProfile == "xbox");
+			usbOutputProfile->add(_("DUALSENSE"), "ds5", curProfile == "ds5");
+			usbOutputProfile->add(_("SWITCH PRO"), "switch", curProfile == "switch");
+			usbOutputProfile->add(_("GENERIC HID"), "generic", curProfile == "generic");
+		}
+		s->addWithLabel(_("OUTPUT PROFILE"), usbOutputProfile);
+
+		if (hasRxjoyUsb)
+		{
+			usbOutputAudio = std::make_shared<OptionListComponent<std::string>>(mWindow, _("CONTROLLER AUDIO"), false);
+			std::string curAudio = SystemConf::getInstance()->get("system.controller_output.audio");
+			if (curAudio.empty()) curAudio = "off";
+			usbOutputAudio->add(_("OFF"), "off", curAudio == "off");
+			usbOutputAudio->add(_("USB (UAC2)"), "usb", curAudio == "usb");
+			usbOutputAudio->add(_("BLUETOOTH (HFP)"), "bluetooth", curAudio == "bluetooth");
+			s->addWithLabel(_("CONTROLLER AUDIO"), usbOutputAudio);
+		}
+	}
+
+	s->addSaveFunc([this, window, usbGadgetScript, optionsUSBGadget, selectedUSBGadget,
+	                usbOutputProfile, usbOutputAudio, hasRxjoyUsb] {
 		if (optionsUSBGadget->changed()) {
 			std::string selected = optionsUSBGadget->getSelected();
-			// Run gadget mode switch in background to avoid blocking the UI
-			// (gadget teardown can take seconds on DWC3 controllers)
 			Utils::Platform::runSystemCommand(usbGadgetScript + " " + selected + " &", "", nullptr);
 			if (selected == "network") {
-				// Give gadget time to come up before querying address
 				Utils::Platform::runSystemCommand("sleep 2", "", nullptr);
 				std::string usbip = std::string(Utils::Platform::GetShOutput(R"(/usr/bin/usbgadget address)"));
 				mWindow->pushGui(new GuiMsgBox(mWindow, _("USB Networking enabled, the device IP is ") + usbip, _("OK"), nullptr));
 			}
+		}
+		// Save controller output settings if visible
+		if (usbOutputProfile) {
+			std::string profile = usbOutputProfile->getSelected();
+			SystemConf::getInstance()->set("system.controller_output.profile", profile);
+			SystemConf::getInstance()->set("system.controller_output.mode", "usb");
+		}
+		if (usbOutputAudio && hasRxjoyUsb) {
+			SystemConf::getInstance()->set("system.controller_output.audio", usbOutputAudio->getSelected());
 		}
 	});
 
