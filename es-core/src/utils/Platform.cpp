@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 #include <arpa/inet.h>
 #include <sys/wait.h>
-#include <unistd.h>
+#include <spawn.h>
 #endif
 
 #include <fcntl.h>
@@ -28,6 +28,10 @@
 #include "renderers/Renderer.h"
 
 // #define DEVTEST
+
+#if !defined(WIN32)
+extern char **environ;
+#endif
 
 namespace Utils
 {
@@ -163,29 +167,44 @@ namespace Utils
 			  cmdOutput = "((((" + cmd_utf8 + " 2> /dev/null ; echo $? >&3) | head -300 > /dev/null) 3>&1) | (read xs; exit $xs))";
 
 			if (waitForExit) {
-			  int n = system(cmdOutput.c_str());
-			  return WEXITSTATUS(n);
+			  // Use posix_spawn() instead of system() to avoid
+			  // multi-threaded fork() deadlock.  system() calls fork()
+			  // which copies all mutex states from other threads; if any
+			  // thread (e.g. texture loader) holds a glibc/malloc lock at
+			  // fork time, the child inherits a locked mutex with no
+			  // thread to release it, deadlocking on the first allocation.
+			  // posix_spawn() uses vfork()+exec() internally on Linux,
+			  // which is safe in multi-threaded processes.
+			  pid_t pid;
+			  posix_spawnattr_t attr;
+			  posix_spawnattr_init(&attr);
+
+			  const char *argv[] = { "/bin/sh", "-c", cmdOutput.c_str(), NULL };
+			  int spawnErr = posix_spawn(&pid, "/bin/sh", NULL, &attr,
+			                             const_cast<char* const*>(argv), environ);
+			  posix_spawnattr_destroy(&attr);
+
+			  if (spawnErr != 0) {
+			    LOG(LogError) << "posix_spawn failed: " << strerror(spawnErr);
+			    return 1;
+			  }
+
+			  int status = 0;
+			  waitpid(pid, &status, 0);
+			  return WEXITSTATUS(status);
 			}
 
-			// fork the current process
-			pid_t ret = fork();
-			if (ret == 0)
-			{
-				ret = fork();
-				if (ret == 0)
-				{
-					execl("/bin/sh", "sh", "-c", cmdOutput.c_str(), (char *) NULL);
-					_exit(1); // execl failed
-				}
-				_exit(0); // exit the child process
-			}
-			else
-			{
-				if (ret > 0)
-				{
-					int status;
-					waitpid(ret, &status, 0); // keep calm and kill zombies
-				}
+			// Async launch: use posix_spawn with double-spawn pattern
+			// to avoid zombies (child immediately spawns grandchild then exits).
+			pid_t pid;
+			// Wrap in a shell one-liner that double-forks
+			std::string asyncCmd = "(" + cmdOutput + ") &";
+			const char *argv[] = { "/bin/sh", "-c", asyncCmd.c_str(), NULL };
+			int spawnErr = posix_spawn(&pid, "/bin/sh", NULL, NULL,
+			                           const_cast<char* const*>(argv), environ);
+			if (spawnErr == 0) {
+			  int status;
+			  waitpid(pid, &status, 0);
 			}
 
 			return 0;
