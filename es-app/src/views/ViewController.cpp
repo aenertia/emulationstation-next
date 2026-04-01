@@ -459,15 +459,20 @@ void ViewController::onFileChanged(FileData* file, FileChangeType change)
 
 bool ViewController::doLaunchGame(FileData* game, LaunchGameOptions options)
 {
+	LOG(LogInfo) << "doLaunchGame() ENTER for " << game->getName();
+
 	if (mCurrentView) mCurrentView->onHide();
 
 	// Silence TTS when launching a game
+	LOG(LogInfo) << "doLaunchGame() calling TextToSpeech::say";
 	TextToSpeech::getInstance()->say(" ");
 
+	LOG(LogInfo) << "doLaunchGame() calling launchGame()";
 	if (game->launchGame(mWindow, options))
 		if (game->getSourceFileData()->getSystemName() == "windows_installers")
 			return true;
 
+	LOG(LogInfo) << "doLaunchGame() EXIT";
 	return false;
 }
 
@@ -516,8 +521,12 @@ bool ViewController::checkLaunchOptions(FileData* game, LaunchGameOptions option
 
 void ViewController::launch(FileData* game, LaunchGameOptions options, Vector3f center, bool allowCheckLaunchOptions)
 {
+	LOG(LogInfo) << "ViewController::launch() ENTER for " << game->getName();
+
 	if (allowCheckLaunchOptions && !checkLaunchOptions(game, options, center))
 		return;
+
+	LOG(LogInfo) << "ViewController::launch() passed checkLaunchOptions";
 
 	if(game->getType() != GAME)
 	{
@@ -564,6 +573,7 @@ void ViewController::launch(FileData* game, LaunchGameOptions options, Vector3f 
 	stopAnimation(1); // make sure the fade in isn't still playing
 	mWindow->stopNotificationPopups(); // make sure we disable any existing info popup
 	mLockInput = true;
+	LOG(LogInfo) << "ViewController::launch() mLockInput=true, starting transition";
 
 	GuiComponent::isLaunchTransitionRunning = true;
 		
