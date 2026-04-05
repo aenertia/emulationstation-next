@@ -908,7 +908,7 @@ void GuiControllersSettings::openInputSenseHotkeys()
 		return list;
 	};
 
-	// Helper: create an action selector dropdown
+	// Helper: create an action selector dropdown (only actions that input_sense actually supports)
 	auto makeActionList = [this](const std::string& title, const std::string& settingKey,
 	                              const std::string& defaultVal) {
 		auto list = std::make_shared<OptionListComponent<std::string>>(mWindow, title, false);
@@ -925,12 +925,6 @@ void GuiControllersSettings::openInputSenseHotkeys()
 			{ "LED OFF",          "ledcontrol poweroff" },
 			{ "WIFI ENABLE",      "wifictl enable" },
 			{ "WIFI DISABLE",     "wifictl disable" },
-			{ "DISPLAY CYCLE",    "display-cycle move" },
-			{ "DISPLAY MIRROR",   "display-cycle mirror" },
-			{ "DISPLAY OFF/ON",   "display-cycle off" },
-			{ "SCREEN SWITCH",    "screen_switch" },
-			{ "SCREENSHOT",       "rocknix-screenshot" },
-			{ "TOGGLE MANGOHUD",  "mangohud_set toggle" },
 		};
 		for (const auto& a : actions)
 			list->add(_(a.label), a.code, cur == a.code);
@@ -949,19 +943,19 @@ void GuiControllersSettings::openInputSenseHotkeys()
 	auto fnB = makeButtonList(_("FN MODIFIER (B)"), "key.function.b", "BTN_START");
 	s->addWithLabel(_("FN MODIFIER (B)"), fnB);
 
-	// --- Kill Combo ---
+	// --- Kill Combo: FN(A) + hotkey.a + hotkey.b + hotkey.c ---
 	s->addGroup(_("KILL COMBO (FN + A + B + C)"));
 
 	auto killA = makeButtonList(_("KILL BUTTON A"), "key.hotkey.a", "BTN_TL");
 	s->addWithLabel(_("KILL BUTTON A"), killA);
 
-	auto killB = makeButtonList(_("KILL BUTTON B"), "key.hotkey.b", "BTN_TR");
+	auto killB = makeButtonList(_("KILL BUTTON B"), "key.hotkey.b", "BTN_SELECT");
 	s->addWithLabel(_("KILL BUTTON B"), killB);
 
 	auto killC = makeButtonList(_("KILL BUTTON C"), "key.hotkey.c", "BTN_START");
 	s->addWithLabel(_("KILL BUTTON C"), killC);
 
-	// --- FN+A Actions (Vol Up/Down with FN held) ---
+	// --- FN + Volume button action bindings ---
 	s->addGroup(_("FN + VOLUME ACTIONS"));
 
 	auto fnAUp = makeActionList(_("FN(A) + VOL UP"), "key.function.a.up", "brightness up");
@@ -982,33 +976,20 @@ void GuiControllersSettings::openInputSenseHotkeys()
 	auto fnABDown = makeActionList(_("FN(A+B) + VOL DOWN"), "key.function.ab.down", "wifictl disable");
 	s->addWithLabel(_("FN(A+B) + VOL DOWN"), fnABDown);
 
-	// --- FN+Trigger Actions (display cycling) ---
-	s->addGroup(_("FN + TRIGGER ACTIONS"));
+	// --- Input event toggles ---
+	s->addGroup(_("INPUT EVENTS"));
 
-	auto fnAL2 = makeActionList(_("FN(A) + L2"), "key.function.a.l2", "display-cycle move");
-	s->addWithLabel(_("FN(A) + L2"), fnAL2);
+	s->addSwitch(_("D-PAD HOTKEYS"), "key.dpad.events", false);
+	s->addSwitch(_("TOUCHSCREEN KEYBOARD TOGGLE"), "key.touchscreen.events", false);
 
-	auto fnAR2 = makeActionList(_("FN(A) + R2"), "key.function.a.r2", "display-cycle mirror");
-	s->addWithLabel(_("FN(A) + R2"), fnAR2);
-
-	// --- Hotkey Button Combos ---
-	s->addGroup(_("HOTKEY BUTTON COMBOS"));
-
-	auto hkEast = makeActionList(_("HOTKEY + B"), "key.hotkey.a.east", "rocknix-screenshot");
-	s->addWithLabel(_("HOTKEY + B"), hkEast);
-
-	auto hkWest = makeActionList(_("HOTKEY + Y"), "key.hotkey.a.west", "mangohud_set toggle");
-	s->addWithLabel(_("HOTKEY + Y"), hkWest);
-
-	auto hkNorth = makeActionList(_("HOTKEY + X"), "key.hotkey.a.north", "game-guides-tool");
-	s->addWithLabel(_("HOTKEY + X"), hkNorth);
-
-	auto hkBack = makeActionList(_("HOTKEY + BACK"), "key.hotkey.a.back", "screen_switch");
-	s->addWithLabel(_("HOTKEY + BACK"), hkBack);
+	// --- Hardcoded hotkeys (informational, not configurable) ---
+	// L1 + East:   screenshot
+	// L1 + West:   toggle MangoHUD
+	// L1 + North:  game guides
+	// L1 + Select: screen switch
 
 	// Save all settings - requires input_sense restart to take effect
-	s->addSaveFunc([fnA, fnB, killA, killB, killC, fnAUp, fnADown, fnBUp, fnBDown, fnABUp, fnABDown,
-	                fnAL2, fnAR2, hkEast, hkWest, hkNorth, hkBack] {
+	s->addSaveFunc([fnA, fnB, killA, killB, killC, fnAUp, fnADown, fnBUp, fnBDown, fnABUp, fnABDown] {
 		bool changed = false;
 		auto sc = SystemConf::getInstance();
 
@@ -1031,12 +1012,6 @@ void GuiControllersSettings::openInputSenseHotkeys()
 		save("key.function.b.down", fnBDown);
 		save("key.function.ab.up", fnABUp);
 		save("key.function.ab.down", fnABDown);
-		save("key.function.a.l2", fnAL2);
-		save("key.function.a.r2", fnAR2);
-		save("key.hotkey.a.east", hkEast);
-		save("key.hotkey.a.west", hkWest);
-		save("key.hotkey.a.north", hkNorth);
-		save("key.hotkey.a.back", hkBack);
 
 		if (changed) {
 			// Restart input_sense to pick up new bindings
